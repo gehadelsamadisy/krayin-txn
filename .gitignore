@@ -1,0 +1,15 @@
+# Real settings and keys never go into Git. Only .env.example (placeholders) is tracked.
+# Local keys live outside this repo in D:\Ofoq\secrets\ ; the server has its own /opt/krayin/.env.
+.env
+.env.*
+*.env
+!.env.example
+secrets/
+
+# Database dumps and backups contain customer data.
+*.sql
+*.sql.gz
+*.dump
+backups/
+mysql/data/
+mysql/backups/
