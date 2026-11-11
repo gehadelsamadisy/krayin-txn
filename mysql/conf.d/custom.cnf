@@ -1,0 +1,4 @@
+# Your own MySQL settings (read at startup by the krayin-mysql container).
+# The main settings are in docker-compose.yml (command:). Restart MySQL after
+# a change: docker compose restart krayin-mysql
+[mysqld]

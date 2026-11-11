@@ -1,0 +1,14 @@
+# Only overlay/, storage-seed/ and docker/ are needed to build the image.
+.git
+.env
+.env.*
+*.env
+data
+.deploy
+docs
+tests
+scripts
+mysql
+backups
+*.sql
+*.sql.gz

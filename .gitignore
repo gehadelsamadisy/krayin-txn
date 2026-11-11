@@ -13,3 +13,7 @@ secrets/
 backups/
 mysql/data/
 mysql/backups/
+
+# Runtime data on the server (database files, uploads, backups) and deploy state.
+data/
+.deploy/

@@ -1,0 +1,98 @@
+# Krayin CRM with the TXN edits.
+#
+# Settings and keys come from .env next to this file (copy .env.example).
+# Start and update with ./scripts/deploy.sh, not plain "docker compose up":
+# deploy.sh builds the image (txn-krayin:current) this file runs.
+#
+# Data stays on the host, in ./data (never in Git):
+#   data/mysql    MySQL database files
+#   data/storage  Krayin uploads, logs, cache
+#   data/backups  backups from scripts/backup.sh
+name: krayin
+
+x-krayin: &krayin
+  image: txn-krayin:current
+  restart: unless-stopped
+  volumes:
+    - ./.env:/var/www/laravel-crm/.env:ro
+    - ./data/storage:/var/www/laravel-crm/storage
+  labels:
+    com.txn.app: krayin
+
+services:
+  krayin-mysql:
+    image: mysql:8.4.11
+    container_name: krayin-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-krayin}
+      MYSQL_USER: ${DB_USERNAME:-krayin_app}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      TZ: UTC
+    # Settings as arguments so they apply everywhere. Extra settings of your
+    # own go in mysql/conf.d/*.cnf.
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+00:00
+      - --sql-mode=ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+      - --innodb-buffer-pool-size=${MYSQL_BUFFER_POOL:-1G}
+      - --binlog-expire-logs-seconds=604800
+      - --slow-query-log=ON
+      - --long-query-time=2
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+      - ./mysql/conf.d:/etc/mysql/conf.d:ro
+    # Reachable only from this machine (and through an SSH tunnel).
+    ports:
+      - "127.0.0.1:${MYSQL_HOST_PORT:-3306}:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    labels:
+      com.txn.app: krayin
+
+  krayin:
+    <<: *krayin
+    container_name: krayin
+    environment:
+      TXN_INIT: "1"
+    # Only this machine for now; an HTTPS proxy goes in front later.
+    ports:
+      - "127.0.0.1:${KRAYIN_HTTP_PORT:-8080}:80"
+    depends_on:
+      krayin-mysql:
+        condition: service_healthy
+
+  krayin-queue:
+    <<: *krayin
+    container_name: krayin-queue
+    command: ["runuser", "-u", "www-data", "--", "php", "artisan", "queue:work", "--sleep=3", "--tries=3", "--max-time=3600"]
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'artisan queue:work' >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      krayin:
+        condition: service_healthy
+
+  # Off unless KRAYIN_SCHEDULER=true in .env (deploy.sh then starts it).
+  # Krayin's own schedule: inbound-emails:process every 5 min, campaign:process daily.
+  krayin-scheduler:
+    <<: *krayin
+    container_name: krayin-scheduler
+    profiles: ["scheduler"]
+    command: ["runuser", "-u", "www-data", "--", "php", "artisan", "schedule:work"]
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'artisan schedule:work' >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      krayin:
+        condition: service_healthy
