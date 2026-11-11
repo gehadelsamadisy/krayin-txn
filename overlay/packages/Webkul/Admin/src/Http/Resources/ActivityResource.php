@@ -28,6 +28,11 @@ class ActivityResource extends JsonResource
             'user' => new UserResource($this->user),
             'files' => ActivityFileResource::collection($this->files),
             'participants' => ActivityParticipantResource::collection($this->participants),
+            'workers' => $this->workers->map(fn ($worker) => [
+                'id' => $worker->id,
+                'name' => $worker->name,
+                'color' => $worker->calendar_color,
+            ]),
             'location' => $this->location,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

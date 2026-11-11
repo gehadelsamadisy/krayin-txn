@@ -32,6 +32,7 @@ class ActivityDataGrid extends DataGrid
             ->leftJoin('lead_activities', 'activities.id', '=', 'lead_activities.activity_id')
             ->leftJoin('leads', 'lead_activities.lead_id', '=', 'leads.id')
             ->leftJoin('users', 'activities.user_id', '=', 'users.id')
+            ->addSelect(DB::raw("(select GROUP_CONCAT(workers.name ORDER BY workers.name SEPARATOR ', ') from activity_workers inner join workers on workers.id = activity_workers.worker_id where activity_workers.activity_id = activities.id) as worker_names"))
             ->whereIn('type', ['call', 'meeting', 'lunch'])
             ->where(function ($query) {
                 if ($userIds = bouncer()->getAuthorizedUserIds()) {
@@ -109,6 +110,16 @@ class ActivityDataGrid extends DataGrid
             'index' => 'comment',
             'label' => trans('admin::app.activities.index.datagrid.comment'),
             'type' => 'string',
+        ]);
+
+        $this->addColumn([
+            'index' => 'worker_names',
+            'label' => 'Workers',
+            'type' => 'string',
+            'searchable' => false,
+            'sortable' => false,
+            'filterable' => false,
+            'closure' => fn ($row) => e($row->worker_names ?: '—'),
         ]);
 
         $this->addColumn([
@@ -202,6 +213,25 @@ class ActivityDataGrid extends DataGrid
                 'url' => fn ($row) => route('admin.activities.delete', $row->id),
             ]);
         }
+    }
+
+    protected function formatRecords($records): mixed
+    {
+        $records = parent::formatRecords($records);
+
+        foreach ($records as $record) {
+            $additional = $record->additional ?? null;
+            $additional = is_string($additional) ? json_decode($additional, true) : $additional;
+
+            if (filled(data_get($additional, 'calcom.uid')) || data_get($additional, 'txn.kind') === 'visit') {
+                $record->actions = array_values(array_filter(
+                    $record->actions,
+                    fn ($action) => $action['index'] !== 'delete'
+                ));
+            }
+        }
+
+        return $records;
     }
 
     /**

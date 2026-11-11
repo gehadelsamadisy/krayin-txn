@@ -9,7 +9,24 @@
         <!-- Left Panel -->
         {!! view_render_event('admin.leads.view.left.before', ['lead' => $lead]) !!}
 
-        <div class="max-lg:min-w-full max-lg:max-w-full [&>div:last-child]:border-b-0 lg:sticky lg:top-[73px] flex min-w-[394px] max-w-[394px] flex-col self-start rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+        <!-- TXN: give the sticky left panel its own scrollbar so contact details
+             are reachable without scrolling the whole page (scoped CSS because
+             the bundled Tailwind build lacks these classes; pushed to <head>
+             because Vue strips <style> tags inside the app template). -->
+        @push('styles')
+        <style>
+            @media (min-width: 1024px) {
+                .txn-lead-left-panel {
+                    max-height: calc(100vh - 73px - 16px);
+                    overflow-y: auto;
+                    overscroll-behavior: contain;
+                    scrollbar-width: thin;
+                }
+            }
+        </style>
+        @endpush
+
+        <div class="txn-lead-left-panel max-lg:min-w-full max-lg:max-w-full [&>div:last-child]:border-b-0 lg:sticky lg:top-[73px] flex min-w-[394px] max-w-[394px] flex-col self-start rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
             <!-- Lead Information -->
             <div class="flex w-full flex-col gap-2 border-b border-gray-200 p-4 dark:border-gray-800">
                 <!-- Breadcrumb's -->

@@ -52,17 +52,19 @@
         rel="stylesheet"
     />
 
-    <link
-        rel="preload"
-        as="image"
-        href="{{ url('cache/logo/bagisto.png') }}"
-    >
-
-    @if ($favicon = core()->getConfigData('general.design.admin_logo.favicon'))
+    @if ($logo = core()->getConfigData('general.general.admin_logo.logo_image'))
         <link
-            type="image/x-icon"
+            rel="preload"
+            as="image"
+            href="{{ Storage::url($logo) }}"
+        >
+    @endif
+
+    @if ($favicon = core()->getConfigData('general.general.admin_logo.favicon'))
+        <link
+            type="image/png"
             href="{{ Storage::url($favicon) }}"
-            rel="shortcut icon"
+            rel="icon"
             sizes="16x16"
         >
     @else
@@ -77,6 +79,14 @@
     @php
         $brandColor = core()->getConfigData('general.settings.menu_color.brand_color') ?? '#0E90D9';
     @endphp
+
+    @if (request()->routeIs('admin.contacts.workers.schedule'))
+        @include('admin::contacts.workers.schedule-styles')
+    @endif
+
+    @if (request()->routeIs('admin.contacts.workers.routes'))
+        @include('admin::contacts.workers.routes-styles')
+    @endif
 
     @stack('styles')
 

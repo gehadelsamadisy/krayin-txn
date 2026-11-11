@@ -113,6 +113,12 @@ return [
         'route' => 'admin.contacts.organizations.index',
         'sort' => 2,
         'icon-class' => '',
+    ], [
+        'key' => 'contacts.workers',
+        'name' => 'Workers',
+        'route' => 'admin.contacts.workers.index',
+        'sort' => 3,
+        'icon-class' => '',
     ],
 
     /**

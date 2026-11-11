@@ -170,6 +170,21 @@
                                                     </span>
                                                 </p>
 
+                                                <p
+                                                    v-if="activity.workers?.length"
+                                                    class="dark:text-white"
+                                                >
+                                                    Workers:
+
+                                                    <span
+                                                        class="after:content-[',_'] last:after:content-['']"
+                                                        v-for="(worker, index) in activity.workers"
+                                                    >
+                                                        <span v-if="worker.color" :style="{ color: worker.color }">●</span>
+                                                        @{{ worker.name }}
+                                                    </span>
+                                                </p>
+
                                                 <!-- Activity Location -->
                                                 <p
                                                     v-if="activity.location"
@@ -263,7 +278,7 @@
                                                 <template v-if="activity.type != 'email'">
                                                     @if (bouncer()->hasPermission('activities.edit'))
                                                         <x-admin::dropdown.menu.item
-                                                            v-if="! activity.is_done && ['call', 'meeting', 'lunch'].includes(activity.type)"
+                                                            v-if="! activity.is_done && ['call', 'meeting', 'lunch'].includes(activity.type) && ! isCustomerBooking(activity)"
                                                             @click="markAsDone(activity)"
                                                         >
                                                             <div class="flex items-center gap-2">
@@ -286,8 +301,20 @@
                                                         </x-admin::dropdown.menu.item>
                                                     @endif
 
+                                                    {{-- Cal.com visits are cancelled in Cal.com: this only explains how. --}}
+                                                    <x-admin::dropdown.menu.item
+                                                        v-if="isCustomerBooking(activity) && ! ['cancelled', 'rejected'].includes(activity.additional?.calcom?.status)"
+                                                        @click="explainCalcomCancel()"
+                                                    >
+                                                        <div class="flex items-center gap-2">
+                                                            <span class="icon-delete text-2xl"></span>
+
+                                                            Cancel booking
+                                                        </div>
+                                                    </x-admin::dropdown.menu.item>
+
                                                     @if (bouncer()->hasPermission('activities.delete'))
-                                                        <x-admin::dropdown.menu.item @click="remove(activity)">
+                                                        <x-admin::dropdown.menu.item v-if="! isCustomerBooking(activity)" @click="remove(activity)">
                                                             <div class="flex items-center gap-2">
                                                                 <span class="icon-delete text-2xl"></span>
 
@@ -557,6 +584,19 @@
                         .catch(error => {
                             console.error(error);
                         });
+                },
+
+                isCustomerBooking(activity) {
+                    return !! (activity.additional?.calcom?.uid || activity.additional?.txn?.kind === 'visit');
+                },
+
+                // A dialog, not a toast: the toast doesn't wrap long text.
+                explainCalcomCancel() {
+                    this.$emitter.emit('open-confirm-modal', {
+                        title: 'Cancel this booking in Cal.com',
+                        message: @json(\Webkul\Admin\Http\Controllers\Activity\ActivityController::CALCOM_CANCEL_MESSAGE),
+                        options: { btnAgree: 'Got it', btnDisagree: 'Close' },
+                    });
                 },
 
                 markAsDone(activity) {

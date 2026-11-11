@@ -48,11 +48,11 @@
         rel="stylesheet"
     />
 
-    @if ($favicon = core()->getConfigData('general.design.admin_logo.favicon'))
+    @if ($favicon = core()->getConfigData('general.general.admin_logo.favicon'))
         <link
-            type="image/x-icon"
+            type="image/png"
             href="{{ Storage::url($favicon) }}"
-            rel="shortcut icon"
+            rel="icon"
             sizes="16x16"
         >
     @else

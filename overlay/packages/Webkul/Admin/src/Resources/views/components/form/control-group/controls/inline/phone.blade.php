@@ -194,7 +194,10 @@
 
             data() {
                 return {
-                    inputValue: this.value,
+                    // TXN fix: a contact with no phone has NULL here; the
+                    // template calls inputValue.map(), which crashed on NULL
+                    // and hid the whole field (and its edit pencil).
+                    inputValue: this.value || [],
 
                     isEditing: false,
 

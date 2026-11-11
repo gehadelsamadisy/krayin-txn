@@ -3,6 +3,9 @@
 namespace Webkul\Activity\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Validation\ValidationException;
+use Webkul\Admin\Models\Worker;
 use Webkul\Activity\Contracts\Activity as ActivityContract;
 use Webkul\Contact\Models\PersonProxy;
 use Webkul\Lead\Models\LeadProxy;
@@ -51,7 +54,25 @@ class Activity extends Model implements ActivityContract
         'schedule_to',
         'is_done',
         'user_id',
+        'worker_id',
+        'latitude',
+        'longitude',
     ];
+
+    /**
+     * Whatever saves the activity (form, Cal.com sync, seeder, tinker), its
+     * end must be after its start; the worker schedule and routes rely on it.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $activity) {
+            if ($activity->schedule_from && $activity->schedule_to && $activity->schedule_to->lte($activity->schedule_from)) {
+                throw ValidationException::withMessages([
+                    'schedule_to' => 'The end must be after the start.',
+                ]);
+            }
+        });
+    }
 
     /**
      * Get the user that owns the activity.
@@ -107,5 +128,10 @@ class Activity extends Model implements ActivityContract
     public function warehouses()
     {
         return $this->belongsToMany(WarehouseProxy::modelClass(), 'warehouse_activities');
+    }
+
+    public function workers(): BelongsToMany
+    {
+        return $this->belongsToMany(Worker::class, 'activity_workers');
     }
 }

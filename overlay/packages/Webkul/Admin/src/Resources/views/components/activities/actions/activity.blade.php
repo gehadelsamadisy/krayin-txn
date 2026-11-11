@@ -135,6 +135,42 @@
                                 <x-admin::activities.actions.activity.participants />
                             </x-admin::form.control-group>
 
+                            @php
+                                $activityWorkers = \Webkul\Admin\Models\Worker::query()
+                                    ->where('is_active', true)
+                                    ->orderBy('name')
+                                    ->get();
+                            @endphp
+
+                            <x-admin::form.control-group>
+                                <x-admin::form.control-group.label>
+                                    Workers
+                                </x-admin::form.control-group.label>
+
+                                @if ($activityWorkers->isEmpty())
+                                    <p class="text-sm text-gray-500">Register an active worker before assigning workers to this activity.</p>
+                                @else
+                                    <div class="grid gap-2 sm:grid-cols-2">
+                                        @foreach ($activityWorkers as $worker)
+                                            <label class="flex items-center gap-2 text-sm dark:text-gray-300">
+                                                <input
+                                                    type="checkbox"
+                                                    v-model="selectedWorkerIds"
+                                                    :value="{{ $worker->id }}"
+                                                >
+                                                @if ($worker->calendar_color)
+                                                    <span class="inline-block h-3 w-3 rounded-full" style="background-color: {{ $worker->calendar_color }}"></span>
+                                                @endif
+                                                {{ $worker->name }}
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                @endif
+                                <p v-if="workerError" class="mt-2 text-sm text-red-600" role="alert">
+                                    @{{ workerError }}
+                                </p>
+                            </x-admin::form.control-group>
+
                             <!-- Schedule Date -->
                             <div class="flex gap-4">
                                 <!-- Started From -->
@@ -228,6 +264,10 @@
             data: function () {
                 return {
                     isStoring: false,
+
+                    selectedWorkerIds: [],
+
+                    workerError: '',
                     
                     selectedType: {
                         label: "{{ trans('admin::app.components.activities.actions.activity.call') }}",
@@ -251,15 +291,21 @@
 
             methods: {
                 openModal(type) {
+                    this.selectedWorkerIds = [];
+                    this.workerError = '';
+
                     this.$refs.activityModal.open();
                 },
 
                 save(params) {
                     this.isStoring = true;
+                    params.worker_ids = this.selectedWorkerIds;
+                    params.worker_assignment_present = 1;
 
                     this.$axios.post("{{ route('admin.activities.store') }}", params)
                         .then (response => {
                             this.isStoring = false;
+                            this.workerError = '';
 
                             this.$emitter.emit('add-flash', { type: 'success', message: response.data.message });
 
@@ -271,7 +317,13 @@
                             this.isStoring = false;
 
                             if (error.response.status == 422) {
-                                setErrors(error.response.data.errors);
+                                const errors = error.response.data.errors || {};
+
+                                if (errors.worker_ids?.length) {
+                                    this.workerError = errors.worker_ids[0];
+                                } else {
+                                    setErrors(errors);
+                                }
                             } else {
                                 this.$emitter.emit('add-flash', { type: 'error', message: error.response.data.message });
 

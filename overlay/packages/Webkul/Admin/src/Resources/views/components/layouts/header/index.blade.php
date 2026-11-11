@@ -9,21 +9,21 @@
                 <img
                     class="h-10"
                     src="{{ Storage::url($logo) }}"
-                    alt="{{ config('app.name') }}"
+                    alt="TXN Logo"
                 />
             @else
                 <img
                     class="h-10 max-sm:hidden"
                     src="{{ request()->cookie('dark_mode') ? vite()->asset('images/dark-logo.svg') : vite()->asset('images/logo.svg') }}"
                     id="logo-image"
-                    alt="{{ config('app.name') }}"
+                    alt="TXN Logo"
                 />
 
                 <img
                     class="h-10 sm:hidden"
                     src="{{ request()->cookie('dark_mode') ? vite()->asset('images/mobile-dark-logo.svg') : vite()->asset('images/mobile-light-logo.svg') }}"
                     id="logo-image"
-                    alt="{{ config('app.name') }}"
+                    alt="TXN Logo"
                 />
             @endif
         </a>
@@ -43,6 +43,18 @@
             @include('admin::components.layouts.header.mobile.mega-search')
         </div>
         
+        <!-- TXN: Cal.com sync on every page (same action as the button on
+             the Workers list, a worker's Schedule and the Person page). -->
+        @if (bouncer()->hasPermission('contacts.persons.view'))
+            <form method="POST" action="{{ route('admin.contacts.calcom_sync') }}" class="flex max-md:hidden">
+                @csrf
+
+                <button type="submit" class="secondary-button whitespace-nowrap" title="Copy new, moved and cancelled Cal.com bookings into Krayin">
+                    Sync Cal.com
+                </button>
+            </form>
+        @endif
+
         <!-- Dark mode -->
         <v-dark>
             <div class="flex">
@@ -162,12 +174,14 @@
 
                     if (this.isDarkMode) {
                         this.$emitter.emit('change-theme', 'dark');
-
-                        document.getElementById('logo-image').src = this.dark_logo;
                     } else {
                         this.$emitter.emit('change-theme', 'light');
+                    }
 
-                        document.getElementById('logo-image').src = this.logo;
+                    const logoImage = document.getElementById('logo-image');
+
+                    if (logoImage) {
+                        logoImage.src = this.isDarkMode ? this.dark_logo : this.logo;
                     }
                 },
 

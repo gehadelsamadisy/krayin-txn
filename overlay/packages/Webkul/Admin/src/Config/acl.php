@@ -24,7 +24,7 @@ return [
     ], [
         'key' => 'leads.edit',
         'name' => 'admin::app.acl.edit',
-        'route' => ['admin.leads.edit', 'admin.leads.update', 'admin.leads.mass_update'],
+        'route' => ['admin.leads.edit', 'admin.leads.update', 'admin.leads.mass_update', 'admin.leads.triage', 'admin.leads.triage_new', 'admin.leads.import_csv'],
         'sort' => 3,
     ], [
         'key' => 'leads.delete',
@@ -134,7 +134,7 @@ return [
     ], [
         'key' => 'contacts.persons',
         'name' => 'admin::app.acl.persons',
-        'route' => 'admin.contacts.persons.index',
+        'route' => ['admin.contacts.persons.index', 'admin.contacts.persons.columns.update'],
         'sort' => 1,
     ], [
         'key' => 'contacts.persons.create',
@@ -154,8 +154,41 @@ return [
     ], [
         'key' => 'contacts.persons.view',
         'name' => 'admin::app.acl.view',
-        'route' => 'admin.contacts.persons.view',
+        'route' => [
+            'admin.contacts.persons.view',
+            'admin.contacts.persons.booking_link.create',
+            'admin.contacts.persons.booking_link.send',
+            'admin.contacts.calcom_sync',
+        ],
         'sort' => 5,
+    ], [
+        'key' => 'contacts.workers',
+        'name' => 'Workers',
+        'route' => ['admin.contacts.workers.index', 'admin.contacts.workers.schedule', 'admin.contacts.workers.routes'],
+        'sort' => 3,
+    ], [
+        'key' => 'contacts.workers.create',
+        'name' => 'admin::app.acl.create',
+        'route' => ['admin.contacts.workers.create', 'admin.contacts.workers.store'],
+        'sort' => 1,
+    ], [
+        'key' => 'contacts.workers.edit',
+        'name' => 'admin::app.acl.edit',
+        'route' => [
+            'admin.contacts.workers.edit',
+            'admin.contacts.workers.update',
+            'admin.contacts.workers.time_off.edit',
+            'admin.contacts.workers.time_off.update',
+            'admin.contacts.workers.time_off.delete',
+            'admin.contacts.workers.bookings.create',
+            'admin.contacts.workers.bookings.store',
+        ],
+        'sort' => 2,
+    ], [
+        'key' => 'contacts.workers.settings',
+        'name' => 'admin::app.acl.edit',
+        'route' => ['admin.contacts.workers.settings', 'admin.contacts.workers.settings.update'],
+        'sort' => 2,
     ], [
         'key' => 'contacts.organizations',
         'name' => 'admin::app.acl.organizations',

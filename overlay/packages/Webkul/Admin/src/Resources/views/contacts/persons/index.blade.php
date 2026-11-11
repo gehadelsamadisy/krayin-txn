@@ -14,6 +14,41 @@
             </div>
 
             <div class="flex items-center gap-x-2.5">
+                <details class="relative">
+                    <summary class="secondary-button cursor-pointer list-none">
+                        Fields (all admins)
+                    </summary>
+
+                    <form
+                        method="POST"
+                        action="{{ route('admin.contacts.persons.columns.update') }}"
+                        class="absolute right-0 z-20 mt-2 grid min-w-56 gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-lg dark:border-gray-800 dark:bg-gray-900"
+                    >
+                        @csrf
+                        @method('PUT')
+
+                        @foreach ($personGridColumns as $column => $label)
+                            <label class="flex items-center gap-2 whitespace-nowrap">
+                                <input
+                                    type="checkbox"
+                                    name="visible_columns[]"
+                                    value="{{ $column }}"
+                                    @checked(in_array($column, $visibleColumns, true))
+                                >
+                                <span>{{ $label }}</span>
+                            </label>
+                        @endforeach
+
+                        @error('visible_columns')
+                            <p class="text-sm text-red-600" role="alert">{{ $message }}</p>
+                        @enderror
+
+                        <button type="submit" class="primary-button">
+                            Save for everyone
+                        </button>
+                    </form>
+                </details>
+
                 <!-- Export Modal -->
                 <x-admin::datagrid.export :src="route('admin.contacts.persons.index')" />
 
@@ -68,15 +103,14 @@
                     </template>
 
                     <template v-else>
-                        <div class="row grid grid-cols-[.1fr_.2fr_.2fr_.2fr_.2fr_.2fr] grid-rows-1 items-center border-b px-4 py-2.5 dark:border-gray-800 max-lg:hidden">
-                            <div
-                                class="flex select-none items-center gap-2.5"
-                                v-for="(columnGroup, index) in [['id'], ['person_name'], ['emails'], ['contact_numbers'], ['organization']]"
-                            >
+                        <div
+                            class="row grid grid-rows-1 items-center border-b px-4 py-2.5 dark:border-gray-800 max-lg:hidden"
+                            :style="gridStyle(available)"
+                        >
+                            <div class="flex items-center">
                                 <label
                                     class="flex w-max cursor-pointer select-none items-center gap-1"
                                     for="mass_action_select_all_records"
-                                    v-if="! index"
                                 >
                                     <input
                                         type="checkbox"
@@ -97,29 +131,27 @@
                                     >
                                     </span>
                                 </label>
+                            </div>
 
+                            <div
+                                class="flex select-none items-center gap-2.5"
+                                v-for="column in available.columns.filter(column => column.visibility)"
+                            >
                                 <p class="text-gray-600 dark:text-gray-300">
-                                    <span class="[&>*]:after:content-['_/_']">
-                                        <template v-for="column in columnGroup">
-                                            <span
-                                                class="after:content-['/'] last:after:content-['']"
-                                                :class="{
-                                                    'font-medium text-gray-800 dark:text-white': applied.sort.column == column,
-                                                    'cursor-pointer hover:text-gray-800 dark:hover:text-white': available.columns.find(columnTemp => columnTemp.index === column)?.sortable,
-                                                }"
-                                                @click="
-                                                    available.columns.find(columnTemp => columnTemp.index === column)?.sortable ? sort(available.columns.find(columnTemp => columnTemp.index === column)): {}
-                                                "
-                                            >
-                                                @{{ available.columns.find(columnTemp => columnTemp.index === column)?.label }}
-                                            </span>
-                                        </template>
+                                    <span
+                                        :class="{
+                                            'font-medium text-gray-800 dark:text-white': applied.sort.column === column.index,
+                                            'cursor-pointer hover:text-gray-800 dark:hover:text-white': column.sortable,
+                                        }"
+                                        @click="column.sortable ? sort(column) : {}"
+                                    >
+                                        @{{ column.label }}
                                     </span>
 
                                     <i
                                         class="align-text-bottom text-base text-gray-800 dark:text-white ltr:ml-1.5 rtl:mr-1.5"
                                         :class="[applied.sort.order === 'asc' ? 'icon-stats-down': 'icon-stats-up']"
-                                        v-if="columnGroup.includes(applied.sort.column)"
+                                        v-if="column.index === applied.sort.column"
                                     ></i>
                                 </p>
                             </div>
@@ -209,11 +241,11 @@
 
                     <template v-else>
                         <div
-                            class="row grid grid-cols-[.1fr_.2fr_.2fr_.2fr_.2fr_.2fr] grid-rows-1 border-b px-4 py-2.5 transition-all hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-950 max-lg:hidden"
+                            class="row grid grid-rows-1 border-b px-4 py-2.5 transition-all hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-950 max-lg:hidden"
+                            :style="gridStyle(available)"
                             v-for="record in available.records"
                         >
-                            <!-- Mass Action and Person ID. -->
-                            <div class="flex items-center gap-2.5">
+                            <div class="flex items-center">
                                 <input
                                     type="checkbox"
                                     :name="`mass_action_select_record_${record.id}`"
@@ -227,33 +259,31 @@
                                     class="icon-checkbox-outline peer-checked:icon-checkbox-select cursor-pointer rounded-md text-2xl text-gray-600 peer-checked:text-brandColor dark:text-gray-300"
                                     :for="`mass_action_select_record_${record.id}`"
                                 ></label>
+                            </div>
 
-                                <div class="flex flex-col gap-1.5 dark:text-gray-300">
-                                    @{{ record.id }}
+                            <template v-for="column in available.columns.filter(column => column.visibility)">
+                                <div
+                                    v-if="column.index === 'id'"
+                                    class="flex items-center dark:text-gray-300"
+                                >
+                                    <span class="dark:text-gray-300">
+                                        @{{ record.id }}
+                                    </span>
                                 </div>
-                            </div>
 
-                            <!-- Name -->
-                            <div class="flex items-center gap-1.5 dark:text-gray-300">
-                                <x-admin::avatar ::name="record.person_name" />
+                                <div
+                                    v-else-if="column.index === 'person_name'"
+                                    class="flex items-center gap-1.5 dark:text-gray-300"
+                                >
+                                    <x-admin::avatar ::name="record.person_name" />
 
-                                @{{ record.person_name }}
-                            </div>
+                                    @{{ record.person_name }}
+                                </div>
 
-                            <!-- Emails -->
-                            <p class="flex items-center dark:text-gray-300">
-                                @{{ record.emails }}
-                            </p>
-
-                            <!-- Contact Numbers -->
-                            <p class="flex items-center dark:text-gray-300">
-                                @{{ record.contact_numbers }}
-                            </p>
-
-                            <!-- Organization -->
-                            <p class="flex items-center dark:text-gray-300">
-                                @{{ record.organization }}
-                            </p>
+                                <p v-else class="flex items-center dark:text-gray-300">
+                                    @{{ record[column.index] }}
+                                </p>
+                            </template>
 
                             <!-- Actions -->
                             <div class="flex items-center justify-end gap-x-4">
@@ -317,10 +347,10 @@
 
                             <!-- Card Content -->
                             <div class="grid gap-2">
-                                <template v-for="column in available.columns">
+                                <template v-for="column in available.columns.filter(column => column.visibility)">
                                     <div class="flex flex-wrap items-baseline gap-x-2">
                                         <span class="text-slate-600 dark:text-gray-300" v-html="column.label + ':'"></span>
-                                        <span class="break-words font-medium text-slate-900 dark:text-white" v-html="record[column.index]"></span>
+                                        <span class="break-words font-medium text-slate-900 dark:text-white" v-text="record[column.index]"></span>
                                     </div>
                                 </template>
                             </div>
@@ -333,6 +363,16 @@
         <script type="module">
             app.component('v-persons', {
                 template: '#v-persons-template',
+
+                methods: {
+                    gridStyle(available) {
+                        const columnCount = available.columns.filter(column => column.visibility).length;
+
+                        return {
+                            gridTemplateColumns: `0.1fr repeat(${columnCount}, minmax(0, 1fr)) 0.2fr`,
+                        };
+                    },
+                },
             });
         </script>
     @endPushOnce

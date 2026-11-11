@@ -4,8 +4,18 @@ use Illuminate\Support\Facades\Route;
 use Webkul\Admin\Http\Controllers\Lead\ActivityController;
 use Webkul\Admin\Http\Controllers\Lead\EmailController;
 use Webkul\Admin\Http\Controllers\Lead\LeadController;
+use Webkul\Admin\Http\Controllers\Lead\LeadTriageController;
 use Webkul\Admin\Http\Controllers\Lead\QuoteController;
 use Webkul\Admin\Http\Controllers\Lead\TagController;
+
+// Lead check (LeadTriageService) and CSV import (LeadCsvImportService).
+Route::controller(LeadTriageController::class)->prefix('leads')->group(function () {
+    Route::post('check-new', 'checkNew')->name('admin.leads.triage_new');
+
+    Route::post('import-csv', 'import')->name('admin.leads.import_csv');
+
+    Route::post('{id}/check', 'check')->name('admin.leads.triage');
+});
 
 Route::controller(LeadController::class)->prefix('leads')->group(function () {
     Route::get('', 'index')->name('admin.leads.index');

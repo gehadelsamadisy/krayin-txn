@@ -40,6 +40,11 @@ return [
                 'title' => 'admin::app.configuration.index.general.general.admin-logo.logo-image',
                 'type' => 'image',
                 'validation' => 'mimes:bmp,jpeg,jpg,png,webp,svg',
+            ], [
+                'name' => 'favicon',
+                'title' => 'Favicon (PNG)',
+                'type' => 'image',
+                'validation' => 'mimes:png',
             ],
         ],
     ], [

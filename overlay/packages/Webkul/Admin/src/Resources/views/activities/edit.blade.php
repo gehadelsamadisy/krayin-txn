@@ -1,7 +1,7 @@
 <x-admin::layouts>
     <!-- Page Title -->
     <x-slot:title>
-        @lang('admin::app.activities.edit.title')
+        {{ $isCalcomBooking ? ($canAssignCalcomWorker ? 'Worker assignment' : 'Cal.com booking') : trans('admin::app.activities.edit.title') }}
     </x-slot>
 
     {!! view_render_event('admin.activities.edit.form.before') !!}
@@ -13,32 +13,45 @@
         <div class="flex flex-col gap-4">
             <div class="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
                 <div class="flex flex-col gap-2">
-                    <!-- Breadcrumbs -->
-                    <x-admin::breadcrumbs
-                        name="activities.edit"
-                        :entity="$activity"
-                    />
+                    @unless ($isCalcomBooking)
+                        <x-admin::breadcrumbs
+                            name="activities.edit"
+                            :entity="$activity"
+                        />
+                    @endunless
 
                     <!-- Page Title -->
                     <div class="text-xl font-bold dark:text-gray-300">
-                        @lang('admin::app.activities.edit.title')
+                        {{ $isCalcomBooking ? ($canAssignCalcomWorker ? 'Worker assignment' : 'Cal.com booking') : trans('admin::app.activities.edit.title') }}
                     </div>
                 </div>
 
                 <div class="flex items-center gap-x-2.5">
                     <!-- Create button for person -->
                     <div class="flex items-center gap-x-2.5">
-                        {!! view_render_event('admin.activities.edit.save_button.before') !!}
+                        @if (! $isCalcomBooking && bouncer()->hasPermission('activities.delete'))
+                            <button
+                                type="button"
+                                class="secondary-button"
+                                onclick="deleteWorkerActivity()"
+                            >
+                                Delete
+                            </button>
+                        @endif
 
-                        <!-- Save Button -->
-                        <button
-                            type="submit"
-                            class="primary-button"
-                        >
-                            @lang('admin::app.activities.edit.save-btn')
-                        </button>
+                        @if (! $isCalcomBooking || $canAssignCalcomWorker)
+                            {!! view_render_event('admin.activities.edit.save_button.before') !!}
 
-                        {!! view_render_event('admin.activities.edit.save_button.after') !!}
+                            <!-- Save Button -->
+                            <button
+                                type="submit"
+                                class="primary-button"
+                            >
+                                {{ $isCalcomBooking ? 'Save worker assignment' : trans('admin::app.activities.edit.save-btn') }}
+                            </button>
+
+                            {!! view_render_event('admin.activities.edit.save_button.after') !!}
+                        @endif
                     </div>
                 </div>
             </div>
@@ -49,6 +62,28 @@
                 <div class="box-shadow flex-1 gap-2 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900 max-xl:flex-auto">
                     {!! view_render_event('admin.activities.edit.form_controls.before') !!}
 
+                    @if ($isCalcomBooking)
+                        <div class="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200">
+                            @if ($canAssignCalcomWorker)
+                                This appointment is booked through Cal.com. Its time and customer details cannot be changed here.
+                                Changing the worker does not change or notify the customer.
+                                {{ \Webkul\Admin\Http\Controllers\Activity\ActivityController::CALCOM_CANCEL_MESSAGE }}
+                            @else
+                                This appointment is cancelled or rejected in Cal.com. Its worker assignment cannot be changed here.
+                            @endif
+                        </div>
+
+                        <div class="mb-5 grid gap-3 sm:grid-cols-2">
+                            <div>
+                                <p class="text-xs font-medium text-gray-500">Scheduled from</p>
+                                <p class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ $activity->schedule_from?->format('M j, Y g:i A') }}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs font-medium text-gray-500">Scheduled to</p>
+                                <p class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ $activity->schedule_to?->format('M j, Y g:i A') }}</p>
+                            </div>
+                        </div>
+                    @else
                     <!-- Schedule Date -->
                     <x-admin::form.control-group>
                         <div class="flex gap-2 max-sm:flex-wrap">
@@ -128,8 +163,57 @@
                             </div>
                         </v-multi-lookup-component>
                     </x-admin::form.control-group>
+                    @endif
+
+                    <!-- Assigned Workers -->
+                    @if (! $isCalcomBooking || $canAssignCalcomWorker)
+                    <x-admin::form.control-group>
+                        <x-admin::form.control-group.label>
+                            {{ $isCalcomBooking ? 'Assigned worker' : 'Workers' }}
+                        </x-admin::form.control-group.label>
+
+                        <input type="hidden" name="worker_assignment_present" value="1">
+
+                        @if ($isCalcomBooking)
+                            <p class="mb-3 text-sm text-gray-500 dark:text-gray-400">
+                                Choose the worker who will handle this appointment.
+                            </p>
+                        @endif
+
+                        <div class="grid gap-2 sm:grid-cols-2">
+                            @forelse ($workers as $worker)
+                                <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                    <input
+                                        type="{{ $isCalcomBooking ? 'radio' : 'checkbox' }}"
+                                        name="worker_ids[]"
+                                        value="{{ $worker->id }}"
+                                        @if ($isCalcomBooking)
+                                            required
+                                            @checked((int) $worker->id === (int) $selectedWorkerId)
+                                        @else
+                                            @checked(in_array($worker->id, old('worker_ids', $activity->workers->pluck('id')->all())))
+                                        @endif
+                                    >
+                                    @if ($worker->calendar_color)
+                                        <span class="inline-block h-3 w-3 rounded-full" style="background-color: {{ $worker->calendar_color }}"></span>
+                                    @endif
+                                    <span>
+                                        {{ $worker->name }}
+                                        @unless ($worker->is_active)
+                                            <span class="text-xs text-amber-600">(inactive)</span>
+                                        @endunless
+                                    </span>
+                                </label>
+                            @empty
+                                <p class="text-sm text-gray-500">No active workers are registered.</p>
+                            @endforelse
+                        </div>
+                        <x-admin::form.control-group.error control-name="worker_ids" />
+                    </x-admin::form.control-group>
+                    @endif
 
                     <!-- Lead -->
+                    @unless ($isCalcomBooking)
                     <x-admin::form.control-group class="!mb-0">
                         <x-admin::form.control-group.label>
                             @lang('admin::app.activities.edit.lead')
@@ -148,11 +232,39 @@
                             />
                         </v-lookup-component>
                     </x-admin::form.control-group>
+                    @endunless
 
                     {!! view_render_event('admin.activities.edit.form_controls.after') !!}
                 </div>
 
                 <!-- Right sub-component -->
+                @if ($isCalcomBooking)
+                    <div class="box-shadow w-[360px] max-w-full rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900 max-xl:w-full">
+                        <h2 class="mb-4 text-base font-semibold text-gray-800 dark:text-white">Cal.com booking details</h2>
+                        <dl class="space-y-4">
+                            <div>
+                                <dt class="text-xs font-medium text-gray-500">Title</dt>
+                                <dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ $activity->title }}</dd>
+                            </div>
+                            <div>
+                                <dt class="text-xs font-medium text-gray-500">Type</dt>
+                                <dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ ucfirst($activity->type) }}</dd>
+                            </div>
+                            @if ($activity->location)
+                                <div>
+                                    <dt class="text-xs font-medium text-gray-500">Location</dt>
+                                    <dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ $activity->location }}</dd>
+                                </div>
+                            @endif
+                            @if ($activity->comment)
+                                <div>
+                                    <dt class="text-xs font-medium text-gray-500">Booking notes</dt>
+                                    <dd class="mt-1 whitespace-pre-line text-sm text-gray-800 dark:text-gray-200">{{ $activity->comment }}</dd>
+                                </div>
+                            @endif
+                        </dl>
+                    </div>
+                @else
                 <div class="w-[360px] max-w-full gap-2 max-xl:w-full">
                     {!! view_render_event('admin.activities.edit.accordion.general.before') !!}
 
@@ -211,10 +323,24 @@
                                     <option value="lunch">
                                         @lang('admin::app.activities.edit.lunch')
                                     </option>
+
+                                    @if ($isWorkerTask)
+                                        <option value="task">Worker booking</option>
+                                    @endif
                                 </x-admin::form.control-group.control>
 
                                 <x-admin::form.control-group.error control-name="type" />
                             </x-admin::form.control-group>
+
+                            @if ($isWorkerTask)
+                                <x-admin::form.control-group class="!mb-0">
+                                    <input type="hidden" name="is_done" value="0">
+                                    <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                        <input type="checkbox" name="is_done" value="1" @checked($activity->is_done)>
+                                        Mark this work task as done
+                                    </label>
+                                </x-admin::form.control-group>
+                            @endif
 
                             <!-- Location -->
                             <x-admin::form.control-group class="!mb-0">
@@ -238,11 +364,32 @@
 
                     {!! view_render_event('admin.activities.edit.accordion.general.after') !!}
                 </div>
+                @endif
             </div>
         </div>
     </x-admin::form>
 
     {!! view_render_event('admin.activities.edit.form.after') !!}
+
+    @if (! $isCalcomBooking && bouncer()->hasPermission('activities.delete'))
+        <script>
+            // Worker events (busy blocks, personal time) are flexible: delete and
+            // return to the worker schedule when that is where we came from.
+            function deleteWorkerActivity() {
+                if (! confirm('Delete this activity? The time becomes available again.')) {
+                    return;
+                }
+
+                axios.delete("{{ route('admin.activities.delete', $activity->id) }}")
+                    .then(() => {
+                        window.location.href = document.referrer.includes('/schedule')
+                            ? document.referrer
+                            : "{{ route('admin.activities.index') }}";
+                    })
+                    .catch((error) => alert(error.response?.data?.message ?? 'The activity could not be deleted.'));
+            }
+        </script>
+    @endif
 
     @pushOnce('scripts')
         <script
