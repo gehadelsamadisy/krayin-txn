@@ -6,14 +6,14 @@ Official Krayin (Docker image `webkul/krayin`, version in `KRAYIN_VERSION`) plus
 
 | Path | What |
 |---|---|
-| `overlay/` | The TXN files, laid over Krayin at `/var/www/laravel-crm`: 29 changed Krayin files (listed in `overrides.txt`) + new TXN files |
+| `overlay/` | The TXN files, laid over Krayin at `/var/www/laravel-crm`: 30 changed Krayin files (listed in `overrides.txt`) + new TXN files |
 | `storage-seed/` | Logo, favicon, slot-finder demo data, Krayin's `installed` marker (copied into storage on first start, never overwriting) |
 | `docker/` | `Dockerfile` (Krayin + overlay) and `entrypoint.sh` (startup) |
 | `docker-compose.yml` | Containers: `krayin` (web), `krayin-queue`, `krayin-scheduler` (off by default), `krayin-mysql` |
-| `scripts/` | `deploy`, `import-initial-data`, `update-krayin`, `rollback`, `backup`, `restore`, `install-backup-cron` |
+| `scripts/` | `deploy`, `import-initial-data`, `update-krayin`, `update-mysql`, `rollback`, `backup`, `restore`, `test-restore`, `install-backup-cron` |
 | `.env.example` | Every setting, secrets as `CHANGE_ME`. Copy to `.env` (never committed) |
-| `data/` | Created on the server: `mysql/` (database), `storage/` (uploads, logs), `backups/`. Never committed |
-| Branch `upstream` | Krayin's own copies of the 29 changed files, one commit per Krayin version. Used by `update-krayin.sh` to merge. Never merge it by hand on GitHub |
+| `data/` | Created on the server, never committed. See "Data and updates" below |
+| Branch `upstream` | Krayin's own copies of the changed files, one commit per Krayin version. Used by `update-krayin.sh` to merge. Never merge it by hand on GitHub |
 
 ## First install on the server
 
@@ -41,11 +41,14 @@ Open it from your PC through an SSH tunnel: `ssh -N -L 8080:127.0.0.1:8080 user@
 | Task | Command |
 |---|---|
 | Deploy after a code change was pushed | `./scripts/deploy.sh` (pulls, builds, backs up, switches, migrates; rolls back by itself if the new version isn't healthy) |
-| Update Krayin to a new version | `./scripts/update-krayin.sh 2.3.0`, then `git push origin main upstream` |
+| Update Krayin to a new version (the safe update procedure) | `./scripts/update.sh 2.3.0` (same as `update-krayin.sh`), then `git push origin main upstream` |
 | Go back to the previous version | `./scripts/rollback.sh` |
-| Back up now | `./scripts/backup.sh [label]` (nightly at 02:15 after `install-backup-cron.sh`; 14 days kept) |
+| Update MySQL (patch only, e.g. 8.4.11 → 8.4.13) | `./scripts/update-mysql.sh 8.4.13` |
+| Back up now | `./scripts/backup.sh [label]` (database + uploads + settings; nightly at 02:15 after `install-backup-cron.sh`; 14 days kept) |
+| Copy backups off the server | `./scripts/offsite-backup.sh` (nightly at 02:45 once `BACKUP_REMOTE` is set; setup steps at the top of the script) |
+| Test that backups restore | `./scripts/test-restore.sh` (scratch database; monthly from cron) |
 | Restore a backup | `./scripts/restore.sh data/backups/<file>.sql.gz` (asks you to type the database name) |
-| Status / logs | `docker compose ps`, `docker logs -f krayin` (or Portainer) |
+| Status / logs | `docker compose ps`; Krayin logs in `data/logs/krayin/`, MySQL in `data/logs/mysql/` (or Portainer) |
 | Artisan | `docker exec -u www-data krayin php artisan <command>` (always as `www-data`) |
 | Database shell | `docker exec -it krayin-mysql mysql -uroot -p` |
 
@@ -53,22 +56,56 @@ From your PC with MySQL Workbench: `ssh -L 3307:127.0.0.1:3306 user@server`, the
 
 Use the scripts rather than `docker compose up` directly: they build the image `txn-krayin:current` that the compose file runs. Portainer shows the stack as `krayin` (external); manage its containers there, but don't create a second copy of the stack from Portainer.
 
+## Data and updates
+
+Containers are disposable. Everything that matters is a bind mount on the host, so rebuilding, updating or recreating a container keeps it:
+
+| Data | On the host | Survives an update? |
+|---|---|---|
+| MySQL database files (+ binary logs, 7 days) | `data/mysql` | Yes |
+| MySQL error log, slow query log | `data/logs/mysql` | Yes |
+| MySQL extra settings | `mysql/conf.d` | Yes |
+| Krayin uploads, cache, sessions | `data/storage` | Yes |
+| Krayin logs (daily files, `LOG_DAILY_DAYS`, default 30) | `data/logs/krayin` | Yes |
+| Settings, keys, `APP_KEY` | `.env` | Yes |
+| Backups | `data/backups` | Yes |
+| Anything written elsewhere inside a container | container | No: never edit files inside a running container |
+| Docker console logs (`docker logs`) | Docker | No; capped at 5 × 20 MB per container |
+
+What destroys data, so avoid it:
+- deleting `data/` (or copying `data/mysql` while MySQL runs);
+- changing the mount paths in `docker-compose.yml` (the container then starts on an empty folder);
+- losing `.env`/`APP_KEY` (it's in every backup as `config-*.tar.gz`);
+- `docker system prune --volumes` habits. The mounts here are folders, not named volumes, but keep the habit anyway.
+
+Images are pinned: Krayin by version and digest (`KRAYIN_VERSION`), MySQL by exact patch (`MYSQL_VERSION` in `.env`). Nothing updates by itself.
+
+Backups must also exist off this server: `scripts/offsite-backup.sh` copies `data/backups` nightly to another server, a NAS or Azure Blob (rclone), and never deletes there. Until `BACKUP_REMOTE` is set in `.env` it does nothing, so the backups are on this server only.
+
+For long-term log retention beyond the server, ship `data/logs` to a central store (Azure Monitor, Loki, ELK); not set up.
+
 ## How updates work
 
 `update-krayin.sh <version>`:
 
 1. downloads `webkul/krayin:<version>`;
-2. copies Krayin's new versions of the 29 changed files onto branch `upstream`;
+2. copies Krayin's new versions of the changed files (`overrides.txt`) onto branch `upstream`;
 3. merges `upstream` into `main`. Git combines Krayin's changes with the TXN ones; if both changed the same lines it stops, lists the files and deploys nothing;
 4. builds the new image and tests it on a copy of the database (email, SMS and APIs switched off): it starts, migrations run, the login page loads;
 5. only then backs up and switches the live Krayin.
 
-If a later problem appears: `./scripts/rollback.sh`, and if the database changed, `./scripts/restore.sh` with the `pre-update` backup.
+6. shows the containers' status, the login page result and the last Krayin log lines.
+
+MySQL keeps running throughout; only the Krayin containers are recreated. If a later problem appears: `./scripts/rollback.sh`, and if the database changed, `./scripts/restore.sh` with the `pre-update` backup.
+
+Why not `docker compose pull krayin`: the running image is built here (Krayin + the TXN files), not downloaded, so pulling would bring plain Krayin without the TXN changes. And no `optimize:clear`: it would also wipe the cache of paid Geocodio lookups; the startup clears only config, routes and views.
+
+**MySQL** is updated separately, on purpose: `./scripts/update-mysql.sh 8.4.13` allows only a newer patch of the same series, backs up first, and puts the old version back if the new one doesn't start. A new series (8.4 → 9.x) or a downgrade is not done in place: dump, start a new MySQL on a separate data folder, restore, test, switch.
 
 Not every update can be guaranteed to work with the TXN changes; the steps above make sure a bad one never reaches the live system unnoticed.
 
 ## Making a TXN change
 
-Edit files under `overlay/` (same paths as inside Krayin), commit, push, then on the server `./scripts/deploy.sh`. A change to one of the 29 files in `overrides.txt` is merged automatically on the next Krayin update. A new file that replaces another Krayin file must be added to `overrides.txt`.
+Edit files under `overlay/` (same paths as inside Krayin), commit, push, then on the server `./scripts/deploy.sh`. A change to one of the files in `overrides.txt` is merged automatically on the next Krayin update. A new file that replaces another Krayin file must be added to `overrides.txt`.
 
 Secrets never go in the repo: settings live in `.env` on each machine.

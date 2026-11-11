@@ -22,13 +22,19 @@ if ! docker exec -e MYSQL_PWD="$(env_get MYSQL_ROOT_PASSWORD)" krayin-mysql \
 fi
 mv "$OUT.part" "$OUT"
 
+# Uploads, read straight from the host folder (works whether Krayin runs or not).
 STORE="data/backups/storage-${TS}${LABEL}.tar.gz"
-if docker exec krayin tar czf - -C /var/www/laravel-crm/storage app > "$STORE.part" 2>/dev/null; then
+if docker run --rm -v "$ROOT/data/storage:/s:ro" --entrypoint tar "$(mysql_image)" czf - -C /s app > "$STORE.part"; then
     mv "$STORE.part" "$STORE"
 else
     rm -f "$STORE.part"
-    echo "(Krayin isn't running: uploads not archived this time)"
+    echo "WARNING: uploads (data/storage/app) could not be archived" >&2
 fi
+
+# Settings: .env (keys, passwords, APP_KEY), MySQL config, Krayin version, deploy state.
+# Private to this user: it holds secrets.
+CONF="data/backups/config-${TS}${LABEL}.tar.gz"
+( umask 077; tar czf "$CONF" .env mysql/conf.d KRAYIN_VERSION $( [ -d .deploy ] && echo .deploy ) )
 
 find data/backups -maxdepth 1 -type f \( -name '*.sql.gz' -o -name '*.tar.gz' \) \
     -mtime +"$(env_get BACKUP_KEEP_DAYS | grep . || echo 14)" -delete

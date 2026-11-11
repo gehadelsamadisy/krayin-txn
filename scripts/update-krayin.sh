@@ -135,5 +135,14 @@ git merge -q --ff-only "$BR"
 git branch -q -d "$BR"
 "$ROOT/scripts/deploy.sh" --no-pull
 
+# --- 6. verify -----------------------------------------------------------------
+log "Verifying"
+compose_app ps
+code=$(docker exec krayin curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1/admin/login || true)
+echo "login page: $code"
+echo "--- last lines of the Krayin log (data/logs/krayin):"
+tail -n 20 "$(ls -t data/logs/krayin/*.log 2>/dev/null | head -1)" 2>/dev/null || echo "(no log lines yet)"
+
 log "Krayin $NEW is live. Backup from just before the update: $SNAP"
+echo "If something is wrong: ./scripts/rollback.sh  (and ./scripts/restore.sh $SNAP if the database changed)"
 echo "Send the update to GitHub so every copy has it:  git push origin main upstream"

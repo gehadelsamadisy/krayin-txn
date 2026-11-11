@@ -19,6 +19,8 @@ env_get() {
 require_env() {
     [ -f .env ] || die ".env not found. Create it: cp .env.example .env && sudo chown \$USER:33 .env && chmod 640 .env && nano .env"
     # The containers read .env as www-data (gid 33); nobody else should.
+    # (Linux only: on a Windows test machine file owners don't apply.)
+    [ "$(uname -o 2>/dev/null)" = "Msys" ] && return 0
     local g m
     g=$(stat -c %g .env 2>/dev/null || echo 33)
     m=$(stat -c %a .env 2>/dev/null || echo 640)
@@ -77,9 +79,27 @@ db_table_count() {
     mysql_root -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$(env_get DB_DATABASE)'"
 }
 
+mysql_image() { echo "mysql:$(env_get MYSQL_VERSION | grep . || echo 8.4.11)"; }
+
+# Host folders for the bind mounts (see docker-compose.yml).
+prepare_data_dirs() {
+    mkdir -p data/mysql data/storage data/backups data/logs/mysql data/logs/krayin
+    # MySQL (uid 999 in its image) writes its error and slow logs here.
+    if [ "$(stat -c %u data/logs/mysql 2>/dev/null)" != "999" ]; then
+        docker run --rm -v "$ROOT/data/logs/mysql:/l" --entrypoint chown "$(mysql_image)" -R 999:999 /l
+    fi
+    # Krayin logs used to live in data/storage/logs: move them once.
+    if [ -d data/storage/logs ] && [ -n "$(ls -A data/storage/logs 2>/dev/null)" ] \
+       && [ -z "$(ls -A data/logs/krayin 2>/dev/null)" ]; then
+        docker run --rm -v "$ROOT/data:/d" --entrypoint sh "$(mysql_image)" -c \
+            'cp -a /d/storage/logs/. /d/logs/krayin/ && rm -rf /d/storage/logs/*'
+        echo "Moved Krayin's existing logs to data/logs/krayin"
+    fi
+}
+
 start_mysql() {
-    mkdir -p data/mysql data/storage data/backups
+    prepare_data_dirs
     log "Starting MySQL"
     compose up -d krayin-mysql
-    wait_healthy krayin-mysql 240 || die "MySQL did not become healthy. See: docker logs krayin-mysql"
+    wait_healthy krayin-mysql 240 || die "MySQL did not become healthy. See: data/logs/mysql/error.log"
 }

@@ -4,11 +4,26 @@
 # Start and update with ./scripts/deploy.sh, not plain "docker compose up":
 # deploy.sh builds the image (txn-krayin:current) this file runs.
 #
-# Data stays on the host, in ./data (never in Git):
-#   data/mysql    MySQL database files
-#   data/storage  Krayin uploads, logs, cache
-#   data/backups  backups from scripts/backup.sh
+# Containers are disposable; everything that matters is a bind mount on the
+# host, in ./data (never in Git), so rebuilding or updating keeps it:
+#   data/mysql         MySQL database files (and binary logs)
+#   data/logs/mysql    MySQL error log + slow query log
+#   data/storage       Krayin uploads, cache, sessions
+#   data/logs/krayin   Krayin (Laravel) logs, rotated daily, 14 days
+#   data/backups       backups from scripts/backup.sh
+# Plus .env (settings, keys, APP_KEY) next to this file.
+#
+# Never use "docker compose down -v" habits, delete ./data, or change these
+# mount paths: a container pointed at an empty folder starts with no data.
 name: krayin
+
+# Docker's own console logs: capped, so they can't fill the disk. They're
+# removed when a container is recreated; the real logs are in data/logs.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
 
 x-krayin: &krayin
   image: txn-krayin:current
@@ -16,12 +31,15 @@ x-krayin: &krayin
   volumes:
     - ./.env:/var/www/laravel-crm/.env:ro
     - ./data/storage:/var/www/laravel-crm/storage
+    - ./data/logs/krayin:/var/www/laravel-crm/storage/logs
+  logging: *logging
   labels:
     com.txn.app: krayin
 
 services:
   krayin-mysql:
-    image: mysql:8.4.11
+    # Exact patch version; change it only with ./scripts/update-mysql.sh.
+    image: mysql:${MYSQL_VERSION:-8.4.11}
     container_name: krayin-mysql
     restart: unless-stopped
     environment:
@@ -39,10 +57,13 @@ services:
       - --sql-mode=ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
       - --innodb-buffer-pool-size=${MYSQL_BUFFER_POOL:-1G}
       - --binlog-expire-logs-seconds=604800
+      - --log-error=/var/log/mysql/error.log
       - --slow-query-log=ON
+      - --slow-query-log-file=/var/log/mysql/slow.log
       - --long-query-time=2
     volumes:
       - ./data/mysql:/var/lib/mysql
+      - ./data/logs/mysql:/var/log/mysql
       - ./mysql/conf.d:/etc/mysql/conf.d:ro
     # Reachable only from this machine (and through an SSH tunnel).
     ports:
@@ -53,6 +74,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+    logging: *logging
     labels:
       com.txn.app: krayin
 

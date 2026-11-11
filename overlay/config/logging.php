@@ -51,7 +51,8 @@ return [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
-            'days' => 14,
+            // TXN: days of daily log files to keep (LOG_DAILY_DAYS in .env).
+            'days' => (int) env('LOG_DAILY_DAYS', 30),
         ],
 
         'slack' => [
