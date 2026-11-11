@@ -17,7 +17,14 @@ env_get() {
 }
 
 require_env() {
-    [ -f .env ] || die ".env not found. Create it: cp .env.example .env && chmod 600 .env && nano .env"
+    [ -f .env ] || die ".env not found. Create it: cp .env.example .env && sudo chown \$USER:33 .env && chmod 640 .env && nano .env"
+    # The containers read .env as www-data (gid 33); nobody else should.
+    local g m
+    g=$(stat -c %g .env 2>/dev/null || echo 33)
+    m=$(stat -c %a .env 2>/dev/null || echo 640)
+    if [ "$g" != "33" ] || [ "${m:1:1}" -lt 4 ] 2>/dev/null; then
+        die ".env must be readable by Krayin's www-data group (33). Run: sudo chown \$USER:33 .env && chmod 640 .env"
+    fi
 }
 
 require_set() {

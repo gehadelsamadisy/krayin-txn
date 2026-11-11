@@ -26,7 +26,8 @@ RUN chmod 0755 /usr/local/bin/txn-entrypoint.sh \
  && find app config packages routes resources public -type f -name '*.bak*' -delete
 
 # nginx in the stock image answers /health with "OK".
-HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+# start-period covers the entrypoint's wait for MySQL (up to 90 s).
+HEALTHCHECK --interval=15s --timeout=5s --start-period=180s --retries=3 \
   CMD curl -fsS http://127.0.0.1/health >/dev/null || exit 1
 
 ENTRYPOINT ["/usr/local/bin/txn-entrypoint.sh"]

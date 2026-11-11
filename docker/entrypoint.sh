@@ -17,6 +17,13 @@ if [ ! -f .env ]; then
     log "ERROR: no .env at $APP/.env. Mount it from the host (see docker-compose.yml)."
     exit 1
 fi
+# Krayin runs as www-data (uid/gid 33). If it can't read .env, Laravel silently
+# falls back to defaults (127.0.0.1, database "forge").
+if ! runuser -u www-data -- test -r .env; then
+    log "ERROR: www-data (uid 33) can't read .env. On the host run:"
+    log "       sudo chown \$USER:33 .env && chmod 640 .env"
+    exit 1
+fi
 
 export MYSQL_AUTOSTART=false
 

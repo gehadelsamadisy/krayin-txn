@@ -61,9 +61,10 @@ services:
     container_name: krayin
     environment:
       TXN_INIT: "1"
-    # Only this machine for now; an HTTPS proxy goes in front later.
+    # KRAYIN_BIND in .env: 127.0.0.1 = this machine only (default);
+    # 0.0.0.0 = also other computers on the network (http://<server-ip>:8080).
     ports:
-      - "127.0.0.1:${KRAYIN_HTTP_PORT:-8080}:80"
+      - "${KRAYIN_BIND:-127.0.0.1}:${KRAYIN_HTTP_PORT:-8080}:80"
     depends_on:
       krayin-mysql:
         condition: service_healthy
