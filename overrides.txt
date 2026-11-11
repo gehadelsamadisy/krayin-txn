@@ -27,3 +27,4 @@ packages/Webkul/Admin/src/Resources/views/sessions/login.blade.php
 packages/Webkul/Admin/src/Resources/views/sessions/reset-password.blade.php
 packages/Webkul/Admin/src/Routes/Admin/contacts-routes.php
 packages/Webkul/Admin/src/Routes/Admin/leads-routes.php
+config/logging.php
