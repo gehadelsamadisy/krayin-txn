@@ -16,6 +16,17 @@ NEW=${1:-}
 [ -n "$NEW" ] || die "Usage: $0 <Krayin version, e.g. 2.3.0>   (versions: https://hub.docker.com/r/webkul/krayin/tags)"
 [ -z "$(git status --porcelain)" ] || die "There are uncommitted changes in $ROOT. Commit or undo them first (git status)."
 
+# The update records Krayin's files as Git commits; a fresh server has no Git name yet.
+git config user.name >/dev/null || git config user.name "Krayin server ($(hostname))"
+git config user.email >/dev/null || git config user.email "krayin@$(hostname).local"
+
+# Start from the latest main and upstream on GitHub (if reachable).
+if git fetch -q origin 2>/dev/null; then
+    git switch -q main && git merge -q --ff-only origin/main 2>/dev/null || true
+    if git show-ref -q --verify refs/heads/upstream; then
+        git switch -q upstream && git merge -q --ff-only origin/upstream 2>/dev/null || true
+    fi
+fi
 git switch -q main
 
 log "Downloading webkul/krayin:$NEW"
@@ -74,7 +85,8 @@ if ! git merge -q --no-edit -m "Merge Krayin $NEW into the TXN edits" upstream; 
 fi
 echo "$BASE" > KRAYIN_VERSION
 git add KRAYIN_VERSION
-git commit -q -m "Use Krayin $NEW"
+# Same version again (a rehearsal) changes nothing: no commit then.
+git diff --cached --quiet || git commit -q -m "Use Krayin $NEW"
 
 # --- 4. test on a copy of the database ----------------------------------------
 log "Testing Krayin $NEW on a copy of the database"
