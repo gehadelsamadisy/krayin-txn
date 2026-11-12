@@ -484,7 +484,7 @@ class LeadCsvImportService
         $email = strtolower($email);
         $allowed = array_map('strtolower', config('mail_guard.allowed_recipients', []));
 
-        return config('lead_triage.import.store_real_emails') || in_array($email, $allowed, true) ? $email : null;
+        return ! config('txn.test_mode', true) || config('lead_triage.import.store_real_emails') || in_array($email, $allowed, true) ? $email : null;
     }
 
     private function description(array $row): string

@@ -47,7 +47,16 @@
 
         @if (! $customerEmailEnabled)
             <div class="mb-5 rounded border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">
-                Customer booking-link creation and email are disabled. No link will be created or sent from this form.
+                @if (config('txn.test_mode', true))
+                    Customer booking-link creation and email are disabled. No link will be created or sent from this form.
+                @else
+                    This contact has no email address. Add one to create and send a booking link.
+                @endif
+            </div>
+        @elseif (! config('txn.test_mode', true))
+            <div class="mb-5 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                "Create link" makes a real Cal.com link and shows it here; nothing is emailed until you press
+                "Email this link". The email goes to the customer.
             </div>
         @else
             <div class="mb-5 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">

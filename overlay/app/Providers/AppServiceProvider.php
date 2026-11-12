@@ -51,16 +51,18 @@ class AppServiceProvider extends ServiceProvider
             }
         });
 
-        // While testing, an email leaves only if every recipient (to, cc, bcc)
-        // is in MAIL_ALLOWED_RECIPIENTS (config/mail_guard.php). Anything else
-        // is not sent and is logged. An empty list blocks every email.
+        // In test mode (TXN_TEST_MODE, config/txn.php) an email leaves only if
+        // every recipient (to, cc, bcc) is in MAIL_ALLOWED_RECIPIENTS
+        // (config/mail_guard.php). Anything else is not sent and is logged.
+        // An empty list blocks every email.
         Event::listen(MessageSending::class, function (MessageSending $event) {
             $allowed = array_map('strtolower', config('mail_guard.allowed_recipients', []));
             $message = $event->message;
             $recipients = collect([...$message->getTo(), ...$message->getCc(), ...$message->getBcc()])
                 ->map(fn ($address) => strtolower($address->getAddress()));
 
-            if ($recipients->isEmpty() || $recipients->contains(fn ($address) => ! in_array($address, $allowed, true))) {
+            if (config('txn.test_mode', true)
+                && ($recipients->isEmpty() || $recipients->contains(fn ($address) => ! in_array($address, $allowed, true)))) {
                 Log::warning('Email not sent: a recipient is not in MAIL_ALLOWED_RECIPIENTS.', [
                     'to' => $recipients->all(),
                     'subject' => $message->getSubject(),

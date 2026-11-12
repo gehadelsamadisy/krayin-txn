@@ -192,7 +192,7 @@ class PersonController extends Controller
             'defaultTimezone' => config('calcom.default_timezone', 'America/Chicago'),
             'calcomConfigured' => filled(config('calcom.api_key')),
             'customerEmailEnabled' => $this->customerLinkAllowed($person),
-            'singleTestAttempt' => config('calcom.single_test_attempt', true),
+            'singleTestAttempt' => $this->singleTestAttempt(),
             'draftLink' => session("booking_link_draft.{$person->id}"),
         ]);
     }
@@ -354,8 +354,12 @@ class PersonController extends Controller
             'slot_workers.*.required' => 'Choose a worker for each time.',
         ]);
 
-        if (!in_array(strtolower($validated['email']), $testRecipients, true)) {
-            return back()->withErrors(['email' => 'This address is not an allowed test recipient.']);
+        if (config('txn.test_mode', true)) {
+            if (!in_array(strtolower($validated['email']), $testRecipients, true)) {
+                return back()->withErrors(['email' => 'This address is not an allowed test recipient.']);
+            }
+        } elseif (!in_array(strtolower($validated['email']), array_map('strtolower', $this->personEmails($person)), true)) {
+            return back()->withErrors(['email' => 'Choose one of this contact\'s email addresses.']);
         }
         $draft = session("booking_link_draft.{$person->id}");
 
@@ -391,7 +395,7 @@ class PersonController extends Controller
         }
 
         if (
-            config('calcom.single_test_attempt', true)
+            $this->singleTestAttempt()
             && !Cache::add('calcom.test-email.sent', $person->id, now()->addYears(10))
         ) {
             return back()
@@ -487,9 +491,22 @@ class PersonController extends Controller
         return is_numeric($leadId) ? $person->leads()->whereKey((int) $leadId)->first() : null;
     }
 
-    /** Links are only created and sent for the configured test contacts. */
+    /** In test mode, only one booking-link email may ever be sent (CALCOM_SINGLE_TEST_ATTEMPT). */
+    private function singleTestAttempt(): bool
+    {
+        return config('txn.test_mode', true) && config('calcom.single_test_attempt', true);
+    }
+
+    /**
+     * Test mode: links are only created and sent for the configured test
+     * contacts. TXN_TEST_MODE=false: for any contact with an email address.
+     */
     private function customerLinkAllowed(Person $person): bool
     {
+        if (!config('txn.test_mode', true)) {
+            return $this->personEmails($person) !== [];
+        }
+
         $testRecipients = config('calcom.test_recipient_emails', []);
 
         return config('calcom.allow_customer_email', false)

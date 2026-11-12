@@ -31,7 +31,7 @@ final class SmsSender
 
         $allowed = array_filter(array_map([ContactDataNormalizer::class, 'phone'], config('sms.allowed_recipients', [])));
 
-        if (! in_array($to, $allowed, true)) {
+        if (config('txn.test_mode', true) && ! in_array($to, $allowed, true)) {
             Log::warning('SMS not sent: the number is not in SMS_ALLOWED_RECIPIENTS.', ['to' => $to, 'person_id' => $person->id]);
 
             return ['status' => 'blocked', 'to' => $to, 'error' => 'Not an allowed test number (SMS_ALLOWED_RECIPIENTS).'];
