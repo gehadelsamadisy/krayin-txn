@@ -70,10 +70,11 @@ function fakeHttp(array $tokens, array $graph): void
 /** Recorded requests whose URL contains $host. */
 function sent(string $host): array
 {
-    return array_values(array_map(
-        fn ($pair) => $pair[0],
-        array_filter(Http::recorded(), fn ($pair) => str_contains($pair[0]->url(), $host))
-    ));
+    return collect(Http::recorded())
+        ->filter(fn ($pair) => str_contains($pair[0]->url(), $host))
+        ->map(fn ($pair) => $pair[0])
+        ->values()
+        ->all();
 }
 
 function sendTest(string $subject = 'Graph check'): ?Throwable
