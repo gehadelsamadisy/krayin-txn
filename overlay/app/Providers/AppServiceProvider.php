@@ -2,9 +2,11 @@
 
 namespace App\Providers;
 
+use App\Mail\GraphTransport;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -14,7 +16,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // MAIL_MAILER=graph: send through Microsoft 365 (config/graph_mail.php),
+        // added here so the stock config/mail.php stays unchanged.
+        if (! config()->has('mail.mailers.graph')) {
+            config(['mail.mailers.graph' => ['transport' => 'graph']]);
+        }
     }
 
     /**
@@ -22,6 +28,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Mail::extend('graph', fn () => new GraphTransport(
+            config('graph_mail.tenant_id'),
+            config('graph_mail.client_id'),
+            config('graph_mail.client_secret'),
+        ));
+
         // Lead check buttons, added through Krayin's view hooks so its lead
         // views stay unchanged.
         Event::listen('admin.leads.view.title.after', fn ($view) => $view->addTemplate('admin::leads.triage-button'));

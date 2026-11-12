@@ -49,7 +49,9 @@ Open it from your PC through an SSH tunnel: `ssh -N -L 8080:127.0.0.1:8080 user@
 | Test that backups restore | `./scripts/test-restore.sh` (scratch database; monthly from cron) |
 | Restore a backup | `./scripts/restore.sh data/backups/<file>.sql.gz` (asks you to type the database name) |
 | Status / logs | `docker compose ps`; Krayin logs in `data/logs/krayin/`, MySQL in `data/logs/mysql/` (or Portainer) |
-| Artisan | `docker exec -u www-data krayin php artisan <command>` (always as `www-data`) |
+| Artisan | `docker exec -u www-data krayin php artisan <command>` (always as `www-data`; for `tinker` add `-e HOME=/tmp`) |
+| Changed `.env` (keys, mail settings) | `docker compose up -d --force-recreate krayin krayin-queue` |
+| Send email through Microsoft 365 instead of SMTP | `MAIL_MAILER=graph` + `GRAPH_*` in `.env` (admin setup: `overlay/config/graph_mail.php`), then recreate as above |
 | Database shell | `docker exec -it krayin-mysql mysql -uroot -p` |
 
 From your PC with MySQL Workbench: `ssh -L 3307:127.0.0.1:3306 user@server`, then connect to `127.0.0.1:3307`.

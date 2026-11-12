@@ -102,6 +102,32 @@ workflows, notifications. Contact emails are fake (`@test.invalid`) except
 the one test contact (`CALCOM_TEST_PERSON_ID`). Cal.com's own emails to
 whoever books are outside Krayin and not covered.
 
+## Email through Microsoft 365 (`MAIL_MAILER=graph`)
+
+`app/Mail/GraphTransport.php` sends Krayin's mail through Exchange Online
+with the Microsoft Graph API instead of SMTP (Microsoft is retiring password
+logins for SMTP). It signs in as an Entra app (client credentials, `Mail.Send`
+application permission), posts the complete MIME message to
+`/users/{MAIL_FROM_ADDRESS}/sendMail` (copy in that mailbox's Sent Items) and
+caches the app token. The mailer is registered in `AppServiceProvider`, so the
+stock `config/mail.php` is unchanged; the guard above applies as with SMTP.
+
+- **Admin setup (once):** a shared mailbox to send from; an app registration
+  with `Mail.Send` (Application) + admin consent; a client secret; an
+  application access policy restricting the app to that mailbox. Details in
+  `config/graph_mail.php`.
+- **`.env`:** `MAIL_MAILER=graph`, `MAIL_FROM_ADDRESS=<that mailbox>`,
+  `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`. Back to SMTP:
+  `MAIL_MAILER=smtp`.
+- Every email must come from that mailbox: a different From address is
+  refused by Microsoft (403 `ErrorAccessDenied`).
+- **The client secret expires** (max. 24 months). Then sending fails with
+  "Microsoft 365 sign-in for sending email failed"; create a new secret and
+  update `GRAPH_CLIENT_SECRET`.
+- Errors reach the same places as SMTP errors: the booking-link page shows
+  "copy the link and send it manually", others are in `laravel.log`.
+- Check: `tests/graph-mail-check.php` (all HTTP faked, nothing sent).
+
 ## SMS (Twilio): one allowed test number
 
 `Support\Contact\SmsSender` sends texts through Twilio's API with the same
