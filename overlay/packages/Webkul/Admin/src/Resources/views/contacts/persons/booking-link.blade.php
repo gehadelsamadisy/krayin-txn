@@ -137,7 +137,8 @@
                     </div>
 
                     <p class="text-xs text-green-900">
-                        "Hi {{ $email['firstName'] }}," the times, the "Choose your time" button and the signature are added automatically, so they always match the link.
+                        The greeting, the times, the button and the signature are added automatically, so they always match the link
+                        (their wording is in Settings &gt; TXN Settings &gt; Emails). Put **two stars** around words to make them bold.
                         <button type="button" class="underline" onclick="txnEmailReset()">Reset the text</button>
                     </p>
 
@@ -320,15 +321,15 @@
 
     <script>
         // Email preview: put the edited text into the preview frame, formatted
-        // like the email template (line breaks; "free, no-obligation
-        // estimate" in bold; an empty closing note is hidden).
+        // like the email template (BookingEmail::html: line breaks, **bold**;
+        // an empty closing note is hidden).
         function txnEmailFormat(text) {
             const div = document.createElement('div');
             div.textContent = text.trim();
 
             return div.innerHTML
                 .replace(/\n/g, '<br>')
-                .replace(/free, no-obligation estimate/g, '<strong>free, no-obligation estimate</strong>');
+                .replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>');
         }
 
         function txnEmailPreview() {

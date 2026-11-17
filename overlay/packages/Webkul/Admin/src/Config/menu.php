@@ -314,6 +314,41 @@ return [
         'route' => 'admin.settings.txn.stage_rules',
         'sort' => 1,
         'icon-class' => 'icon-settings-pipeline',
+    ], [
+        'key' => 'settings.txn.company',
+        'name' => 'Company & sender',
+        'info' => 'Company name, rep name, phone numbers and email colour.',
+        'route' => 'admin.settings.txn.company',
+        'sort' => 2,
+        'icon-class' => 'icon-user',
+    ], [
+        'key' => 'settings.txn.services',
+        'name' => 'Services',
+        'info' => 'Service keywords, categories, flows and confirmation lines.',
+        'route' => 'admin.settings.txn.services',
+        'sort' => 3,
+        'icon-class' => 'icon-settings-type',
+    ], [
+        'key' => 'settings.txn.area',
+        'name' => 'Service area & scheduling',
+        'info' => 'Service area, out-of-area message and the times offered.',
+        'route' => 'admin.settings.txn.area',
+        'sort' => 4,
+        'icon-class' => 'icon-calendar',
+    ], [
+        'key' => 'settings.txn.follow_ups',
+        'name' => 'Follow-ups',
+        'info' => 'When reminders go out and when leads are marked Lost.',
+        'route' => 'admin.settings.txn.follow_ups',
+        'sort' => 5,
+        'icon-class' => 'icon-settings-flow',
+    ], [
+        'key' => 'settings.txn.emails',
+        'name' => 'Emails',
+        'info' => 'The booking-link, reminder and final emails.',
+        'route' => 'admin.settings.txn.emails',
+        'sort' => 6,
+        'icon-class' => 'icon-settings-mail',
     ],
 
     /**

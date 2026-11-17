@@ -1,30 +1,34 @@
-{{-- Booking-link emails, plain-text part (same wording as booking-link.blade.php). --}}
+{{-- Booking-link emails, plain-text part (same wording as booking-link.blade.php,
+     from Settings > TXN Settings > Emails; **bold** marks removed; empty parts left out). --}}
 @php
     $kind = $kind ?? 'link';
     $offer = $kind !== 'final' && $url && $times;
+    $parts = $parts ?? [];
+    $greeting = \Webkul\Admin\Support\Contact\BookingEmail::plain($parts['greeting'] ?? '');
+    $timesHeading = \Webkul\Admin\Support\Contact\BookingEmail::plain($parts['times_heading'] ?? '');
+    $signature = \Webkul\Admin\Support\Contact\BookingEmail::plain($parts['signature'] ?? '');
 @endphp
-Hi {!! $firstName !!},
+@if ($greeting !== '')
+{!! $greeting !!}
 
-{!! trim((string) $intro) !!}
+@endif
+{!! \Webkul\Admin\Support\Contact\BookingEmail::plain($intro) !!}
 @if ($offer)
 
 @foreach ($times as $time)
 - {!! $time !!}
 @endforeach
 
-Choose your time here:
+@if ($timesHeading !== '')
+{!! $timesHeading !!}
+@endif
 {!! $url !!}
 @endif
 @if (trim((string) $closing) !== '')
 
-{!! trim((string) $closing) !!}
+{!! \Webkul\Admin\Support\Contact\BookingEmail::plain($closing) !!}
 @endif
+@if ($signature !== '')
 
-{!! $sender['rep_name'] !!}
-{!! $sender['company'] !!}
-@if ($sender['rep_cell'])
-Cell: {!! $sender['rep_cell'] !!}
-@endif
-@if ($sender['office_phone'])
-Office: {!! $sender['office_phone'] !!}
+{!! $signature !!}
 @endif

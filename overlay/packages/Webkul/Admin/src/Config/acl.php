@@ -603,6 +603,56 @@ return [
         'route' => 'admin.settings.txn.stage_rules.update',
         'sort' => 1,
     ], [
+        'key' => 'settings.txn.company',
+        'name' => 'Company & sender',
+        'route' => 'admin.settings.txn.company',
+        'sort' => 2,
+    ], [
+        'key' => 'settings.txn.company.edit',
+        'name' => 'admin::app.acl.edit',
+        'route' => 'admin.settings.txn.company.update',
+        'sort' => 1,
+    ], [
+        'key' => 'settings.txn.services',
+        'name' => 'Services',
+        'route' => 'admin.settings.txn.services',
+        'sort' => 3,
+    ], [
+        'key' => 'settings.txn.services.edit',
+        'name' => 'admin::app.acl.edit',
+        'route' => 'admin.settings.txn.services.update',
+        'sort' => 1,
+    ], [
+        'key' => 'settings.txn.area',
+        'name' => 'Service area & scheduling',
+        'route' => 'admin.settings.txn.area',
+        'sort' => 4,
+    ], [
+        'key' => 'settings.txn.area.edit',
+        'name' => 'admin::app.acl.edit',
+        'route' => 'admin.settings.txn.area.update',
+        'sort' => 1,
+    ], [
+        'key' => 'settings.txn.follow_ups',
+        'name' => 'Follow-ups',
+        'route' => 'admin.settings.txn.follow_ups',
+        'sort' => 5,
+    ], [
+        'key' => 'settings.txn.follow_ups.edit',
+        'name' => 'admin::app.acl.edit',
+        'route' => 'admin.settings.txn.follow_ups.update',
+        'sort' => 1,
+    ], [
+        'key' => 'settings.txn.emails',
+        'name' => 'Emails',
+        'route' => 'admin.settings.txn.emails',
+        'sort' => 6,
+    ], [
+        'key' => 'settings.txn.emails.edit',
+        'name' => 'admin::app.acl.edit',
+        'route' => 'admin.settings.txn.emails.update',
+        'sort' => 1,
+    ], [
         'key' => 'configuration',
         'name' => 'admin::app.acl.configuration',
         'route' => 'admin.configuration.index',

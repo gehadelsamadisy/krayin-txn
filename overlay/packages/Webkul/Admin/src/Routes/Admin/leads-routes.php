@@ -7,6 +7,7 @@ use Webkul\Admin\Http\Controllers\Lead\LeadController;
 use Webkul\Admin\Http\Controllers\Lead\LeadTriageController;
 use Webkul\Admin\Http\Controllers\Lead\QuoteController;
 use Webkul\Admin\Http\Controllers\Lead\TagController;
+use Webkul\Admin\Http\Controllers\Settings\TxnSettingsController;
 use Webkul\Admin\Http\Controllers\Settings\TxnStageRulesController;
 
 // Lead check (LeadTriageService), CSV import (LeadCsvImportService) and
@@ -27,6 +28,17 @@ Route::controller(TxnStageRulesController::class)->prefix('settings/txn/stage-ru
 
     Route::put('', 'update')->name('admin.settings.txn.stage_rules.update');
 });
+
+// Settings > TXN Settings: Company & sender, Services, Service area &
+// scheduling, Follow-ups, Emails. One route pair per screen, so each has its
+// own permission (acl.php); the screen is passed to the controller.
+foreach (['company', 'services', 'area', 'follow-ups', 'emails'] as $txnScreen) {
+    $txnName = 'admin.settings.txn.'.str_replace('-', '_', $txnScreen);
+
+    Route::get("settings/txn/{$txnScreen}", [TxnSettingsController::class, 'show'])->defaults('screen', $txnScreen)->name($txnName);
+
+    Route::put("settings/txn/{$txnScreen}", [TxnSettingsController::class, 'update'])->defaults('screen', $txnScreen)->name("{$txnName}.update");
+}
 
 Route::controller(LeadController::class)->prefix('leads')->group(function () {
     Route::get('', 'index')->name('admin.leads.index');

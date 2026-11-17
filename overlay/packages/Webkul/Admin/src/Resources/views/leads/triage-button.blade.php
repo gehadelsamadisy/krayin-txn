@@ -16,6 +16,18 @@
         <p class="text-xs text-gray-500">
             {{ $triage['txn_service_category'] ?? '' }} · {{ $triage['txn_location'] ?? '' }} · Missing: {{ $triage['txn_missing'] ?? '' }}
         </p>
+
+        {{-- Out of area: the message to send (Settings > TXN Settings > Service area & scheduling). --}}
+        @if (str_starts_with((string) ($triage['txn_location'] ?? ''), 'Out of area') && trim((string) config('lead_triage.out_of_area_message')) !== '')
+            <div class="mt-2 rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+                <p class="text-xs font-medium text-gray-500">Out-of-area message to send:</p>
+                <p id="txn-ooa-message" class="whitespace-pre-line dark:text-gray-200">{{ config('lead_triage.out_of_area_message') }}</p>
+                <button type="button" class="secondary-button mt-2"
+                    onclick="navigator.clipboard.writeText(document.getElementById('txn-ooa-message').innerText).then(() => { this.innerText = 'Copied'; })">
+                    Copy message
+                </button>
+            </div>
+        @endif
     </div>
 @endif
 

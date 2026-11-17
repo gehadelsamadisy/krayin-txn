@@ -34,6 +34,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Values changed on Settings > TXN Settings, over the config defaults
+        // (Support\Contact\TxnSettings). Again before each queued job, so a
+        // long-running queue worker sees changes made after it started.
+        \Webkul\Admin\Support\Contact\TxnSettings::apply();
+        Event::listen(\Illuminate\Queue\Events\JobProcessing::class, fn () => \Webkul\Admin\Support\Contact\TxnSettings::apply());
+
         // TXNHome calls this after saving a lead to the lead database
         // (LeadWebhookController). "api" group: no session, no CSRF; the
         // shared token is checked in the controller.

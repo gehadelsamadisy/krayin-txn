@@ -16,14 +16,18 @@ use Webkul\Contact\Models\Person;
  *   confirmation (requirements A9): the Cal.com event title and description,
  *     which Cal.com shows on the booking page and in its confirmation email.
  * Customers act through links; they aren't asked to reply.
+ *
+ * Every word of the emails comes from config('lead_messages.templates')
+ * (defaults in overlay/config/lead_messages.php, changed in Settings > TXN
+ * Settings > Emails): per email the subject, intro and closing; shared by all
+ * three the header, greeting, button label, plain-text link line, "button
+ * doesn't work" line and signature. Placeholders: see self::vars(). **text**
+ * is bold in the HTML email and plain in the text email.
  */
 final class BookingEmail
 {
-    public const SUBJECTS = [
-        'link' => 'Choose a time for your free estimate',
-        'reminder' => 'Still looking for a time for your free estimate?',
-        'final' => 'Checking in about your estimate',
-    ];
+    /** Parts shared by all three emails (config lead_messages.templates.shared). */
+    public const SHARED_PARTS = ['header', 'greeting', 'times_heading', 'button', 'fallback', 'signature'];
 
     /** Sends one of the emails with $data from data() (subject/intro/closing may have been edited). */
     public function send(string $kind, string $to, array $data): void
@@ -31,8 +35,59 @@ final class BookingEmail
         Mail::send(
             ['html' => 'admin::emails.booking-link', 'text' => 'admin::emails.booking-link-text'],
             ['kind' => $kind] + $data,
-            fn ($message) => $message->to($to)->subject($data['subject'])
+            fn ($message) => $message->to($to)->subject(self::plain($data['subject']))
         );
+    }
+
+    /** Placeholder values for the templates. */
+    public function vars(array $data): array
+    {
+        $s = $data['sender'];
+
+        return [
+            'first_name' => (string) $data['firstName'],
+            'service' => (string) $data['service'],
+            'rep_name' => (string) $s['rep_name'],
+            'company' => (string) $s['company'],
+            'rep_cell' => (string) $s['rep_cell'],
+            'office_phone' => (string) $s['office_phone'],
+            'call' => $s['rep_cell'] ? "call or text us at {$s['rep_cell']}" : 'give us a call',
+            'timezone' => (string) $data['timezoneLabel'],
+        ];
+    }
+
+    /**
+     * Fills {placeholders}. With $dropEmptyLines (the signature), a line whose
+     * placeholders are all empty is left out, so there is no "Cell:" without
+     * a number.
+     */
+    public static function fill(?string $template, array $vars, bool $dropEmptyLines = false): string
+    {
+        $template = str_replace("\r\n", "\n", (string) $template);
+
+        if ($dropEmptyLines) {
+            $template = implode("\n", array_filter(explode("\n", $template), function (string $line) use ($vars) {
+                if (! preg_match_all('/\{([a-z_]+)\}/', $line, $found)) {
+                    return true;
+                }
+
+                return collect($found[1])->contains(fn ($name) => trim((string) ($vars[$name] ?? '')) !== '');
+            }));
+        }
+
+        return strtr($template, collect($vars)->mapWithKeys(fn ($value, $name) => ["{{$name}}" => $value])->all());
+    }
+
+    /** HTML email: escaped, line breaks kept, **text** in bold. */
+    public static function html(?string $text): string
+    {
+        return preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', nl2br(e(trim((string) $text))));
+    }
+
+    /** Text email and subject: the ** marks removed. */
+    public static function plain(?string $text): string
+    {
+        return preg_replace('/\*\*(.+?)\*\*/s', '$1', trim((string) $text));
     }
 
     /**
@@ -57,31 +112,37 @@ final class BookingEmail
             'sender' => config('lead_messages'),
         ];
 
-        return $data + $this->texts($kind, $data);
+        return $data + $this->texts($kind, $data) + ['parts' => $this->sharedParts($data)];
     }
 
-    /** Default subject, intro (before the times) and closing (after the button) for $kind. */
+    /**
+     * Subject, intro (before the times) and closing (after the button) for
+     * $kind, from the templates. A reminder without open times uses
+     * intro_no_times; the closing only goes with times and a link.
+     */
     public function texts(string $kind, array $data): array
     {
-        $s = $data['sender'];
-        $me = "This is {$s['rep_name']} with {$s['company']}";
-        $call = $s['rep_cell'] ? "call or text us at {$s['rep_cell']}" : 'give us a call';
+        $templates = (array) config("lead_messages.templates.{$kind}", []);
+        $vars = $this->vars($data);
         $offer = $kind !== 'final' && $data['url'] && $data['times'];
-
-        $intro = match (true) {
-            $kind === 'final' => "{$me}, checking in one last time about your {$data['service']} request. If you still need help, just {$call} and we'll get your free, no-obligation estimate scheduled.",
-            $kind === 'reminder' && $offer => "{$me}, following up on your {$data['service']} request. We'd still be happy to schedule your free, no-obligation estimate. These times are open:",
-            $kind === 'reminder' => "{$me}, following up on your {$data['service']} request. We'd still be happy to schedule your free, no-obligation estimate; just {$call} and we'll find a time that works for you.",
-            default => "{$me}. Thank you for reaching out about your {$data['service']} project. We have these times open for your free, no-obligation estimate:",
-        };
+        $intro = $kind === 'reminder' && ! $offer ? 'intro_no_times' : 'intro';
 
         return [
-            'subject' => self::SUBJECTS[$kind].' | '.$s['company'],
-            'intro' => $intro,
-            'closing' => $offer
-                ? "Times are in {$data['timezoneLabel']}. The booking page also asks for any details we still need. The link can be used once; after you book you'll get a confirmation email with options to reschedule or cancel."
-                : '',
+            'subject' => self::fill($templates['subject'] ?? '', $vars),
+            'intro' => self::fill($templates[$intro] ?? '', $vars),
+            'closing' => $offer ? self::fill($templates['closing'] ?? '', $vars) : '',
         ];
+    }
+
+    /** Header, greeting, button label, link lines and signature, filled in. */
+    public function sharedParts(array $data): array
+    {
+        $templates = (array) config('lead_messages.templates.shared', []);
+        $vars = $this->vars($data);
+
+        return collect(self::SHARED_PARTS)->mapWithKeys(fn ($part) => [
+            $part => self::fill($templates[$part] ?? '', $vars, $part === 'signature'),
+        ])->all();
     }
 
     /**

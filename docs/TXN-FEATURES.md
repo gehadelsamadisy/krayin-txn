@@ -431,6 +431,31 @@ Nothing runs automatically yet: `php artisan txn:follow-ups` sends what is
 due, `--dry-run` shows it without sending or changing anything. SMS
 follow-ups come with Twilio.
 
+### TXN Settings (Settings > TXN Settings)
+
+Values staff can change without a code change (`Support\Contact\TxnSettings`,
+controller `Settings\TxnSettingsController`, migration
+`2026_11_20_000100_create_txn_settings`):
+
+| Screen | Settings |
+| --- | --- |
+| Company & sender | company name, rep name, rep cell, office phone, email accent colour |
+| Services | service list (keywords → category → flow; first match wins), each service's confirmation line, the line for other services |
+| Service area & scheduling | area centre (address looked up once, or lat/lon) and radius, out-of-area message (shown on out-of-area leads with a Copy button), slot times, times to offer, days ahead, minimum notice, visit length, most times per day, max extra drive |
+| Follow-ups | reminder / final / Lost hours (must go up), hours before an offered time, Lost reason |
+| Emails | every part of the booking-link, reminder (with / without times) and final emails: per email subject, intro, closing; shared header, greeting, button label, plain-text link line, "button doesn't work" line, signature. Placeholders `{first_name}` `{service}` `{rep_name}` `{company}` `{rep_cell}` `{office_phone}` `{call}` `{timezone}`; `**bold**`; empty part = left out; live preview |
+
+How it works: a saved value is stored in `txn_settings` under its config path
+(e.g. `slot_finder.slot_times`) and put over the config at start-up and before
+every queued job (`AppServiceProvider`), so the code keeps reading `config()`.
+The config files and `.env` are the defaults; a value equal to its default is
+not stored; a stored value that fails the checks is ignored. Every field has
+"Reset to default"; each page has "Reset this page". Every change is logged in
+`txn_settings_log` (area `settings:<screen>`) and shown on the page.
+Permissions: `settings.txn.<screen>` (view) and `.edit` (save). Keys,
+passwords, test mode, the lead database, the time zone and route tuning stay
+in `.env` / config on purpose.
+
 ### Lead stages and worker emails
 
 The stages (migrations `2026_11_05_000100_add_txn_lead_stages`,

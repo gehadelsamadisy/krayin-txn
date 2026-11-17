@@ -700,6 +700,19 @@ final class SlotSuggestionService
     }
 
     /**
+     * Where an address, city or ZIP is, at any precision (e.g. the service-area
+     * centre on Settings > TXN Settings). Same cached Geocodio lookup.
+     *
+     * @return array{lat: float, lon: float}|null
+     */
+    public function locatePlace(string $place): ?array
+    {
+        $result = $this->geocode(trim($place));
+
+        return $result ? ['lat' => $result['lat'], 'lon' => $result['lon']] : null;
+    }
+
+    /**
      * Locate the worker's day-start address using the same address-quality
      * checks and cached Geocodio requests used for customer addresses.
      *
