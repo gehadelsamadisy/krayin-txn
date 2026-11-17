@@ -1,5 +1,5 @@
 {{-- Leads list header (hook admin.leads.index.header.right.before, AppServiceProvider):
-     "Import leads (CSV)" and "Check new leads". --}}
+     "Import leads (CSV)", "Import from lead database" and "Check new leads". --}}
 @if (bouncer()->hasPermission('leads.edit'))
     {{-- The header spreads its children apart; the auto margin keeps these next to "Create Lead". --}}
     <div style="margin-left: auto; margin-right: 10px; display: flex; gap: 10px; align-items: center;">
@@ -13,6 +13,14 @@
             </label>
 
             <input type="file" id="txn-lead-csv" name="file" accept=".csv,text/csv" style="display: none;">
+        </form>
+
+        <form method="POST" action="{{ route('admin.leads.import_db') }}">
+            @csrf
+
+            <button type="submit" class="secondary-button" title="Import the Yelp/Angi leads received in the last 48 hours from the lead database: new leads are added, existing ones (same [TXN-…] tag) are updated, never duplicated">
+                Import from lead database
+            </button>
         </form>
 
         <form method="POST" action="{{ route('admin.leads.triage_new') }}">

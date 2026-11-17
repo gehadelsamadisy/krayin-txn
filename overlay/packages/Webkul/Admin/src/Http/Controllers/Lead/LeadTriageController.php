@@ -5,8 +5,10 @@ namespace Webkul\Admin\Http\Controllers\Lead;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use RuntimeException;
+use Throwable;
 use Webkul\Admin\Http\Controllers\Controller;
 use Webkul\Admin\Support\Contact\LeadCsvImportService;
+use Webkul\Admin\Support\Contact\LeadDbImportService;
 use Webkul\Admin\Support\Contact\LeadTriageService;
 use Webkul\Lead\Models\Lead;
 
@@ -14,6 +16,7 @@ use Webkul\Lead\Models\Lead;
  * "Re-check lead" (lead page) and "Check new leads" (leads list): run the
  * lead check (LeadTriageService). Same as `php artisan txn:triage-leads`.
  * "Import leads (CSV)" (leads list): LeadCsvImportService.
+ * "Import from lead database" (leads list): LeadDbImportService.
  */
 class LeadTriageController extends Controller
 {
@@ -87,5 +90,26 @@ class LeadTriageController extends Controller
 
         return back()->with('lead_import', $result)
             ->with('success', "Leads imported: {$result['created']} new, {$result['updated']} updated, {$result['unchanged']} unchanged.");
+    }
+
+    /** Leads received in the last 48 hours, from the lead database (MySQL). Skipped leads are in laravel.log. */
+    public function importDb(LeadDbImportService $import): RedirectResponse
+    {
+        try {
+            $result = $import->importRecent(48);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return back()->with('error', 'Import from the lead database failed: '.$exception->getMessage());
+        }
+
+        $message = "Lead database (last 48 h): {$result['created']} new, {$result['updated']} updated, {$result['unchanged']} unchanged";
+        $message .= $result['skipped'] ? ", {$result['skipped']} skipped (see laravel.log)." : '.';
+
+        if ($result['check_left']) {
+            $message .= " {$result['check_left']} not checked yet: press Check new leads.";
+        }
+
+        return back()->with('success', $message);
     }
 }

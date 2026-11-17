@@ -24,7 +24,7 @@ return [
     ], [
         'key' => 'leads.edit',
         'name' => 'admin::app.acl.edit',
-        'route' => ['admin.leads.edit', 'admin.leads.update', 'admin.leads.mass_update', 'admin.leads.triage', 'admin.leads.triage_new', 'admin.leads.import_csv'],
+        'route' => ['admin.leads.edit', 'admin.leads.update', 'admin.leads.mass_update', 'admin.leads.triage', 'admin.leads.triage_new', 'admin.leads.import_csv', 'admin.leads.import_db'],
         'sort' => 3,
     ], [
         'key' => 'leads.delete',

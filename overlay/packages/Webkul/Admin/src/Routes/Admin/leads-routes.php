@@ -8,11 +8,14 @@ use Webkul\Admin\Http\Controllers\Lead\LeadTriageController;
 use Webkul\Admin\Http\Controllers\Lead\QuoteController;
 use Webkul\Admin\Http\Controllers\Lead\TagController;
 
-// Lead check (LeadTriageService) and CSV import (LeadCsvImportService).
+// Lead check (LeadTriageService), CSV import (LeadCsvImportService) and
+// import from the lead database (LeadDbImportService).
 Route::controller(LeadTriageController::class)->prefix('leads')->group(function () {
     Route::post('check-new', 'checkNew')->name('admin.leads.triage_new');
 
     Route::post('import-csv', 'import')->name('admin.leads.import_csv');
+
+    Route::post('import-db', 'importDb')->name('admin.leads.import_db');
 
     Route::post('{id}/check', 'check')->name('admin.leads.triage');
 });

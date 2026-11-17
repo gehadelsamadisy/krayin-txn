@@ -58,7 +58,9 @@ return [
     // the admin (same as the old Python importer used).
     // store_real_emails: off while testing, so a new contact gets
     // contact{id}@test.invalid instead of the customer's real address
-    // (addresses in MAIL_ALLOWED_RECIPIENTS are always kept).
+    // (addresses in MAIL_ALLOWED_RECIPIENTS are always kept). In production
+    // set LEAD_IMPORT_STORE_REAL_EMAILS=true; sending is still limited by
+    // TXN_TEST_MODE. Contacts imported before: php artisan txn:restore-contacts.
     // ------------------------------------------------------------------
 
     'import' => [
@@ -71,5 +73,28 @@ return [
         // Unchecked leads stay in Raw Lead for the next "Check new leads".
         'check_seconds' => (int) env('LEAD_IMPORT_CHECK_SECONDS', 200),
     ],
+
+    // ------------------------------------------------------------------
+    // Lead database: MySQL "integration" on the server, filled by TXNHome.
+    // Krayin only reads it (user with SELECT on `lead` only). Registered as
+    // the "lead_db" connection in AppServiceProvider (LeadDbImportService).
+    // ------------------------------------------------------------------
+
+    'lead_db' => [
+        'driver' => 'mysql',
+        'host' => env('LEAD_DB_HOST', '127.0.0.1'),
+        'port' => env('LEAD_DB_PORT', '3307'),
+        'database' => env('LEAD_DB_DATABASE', 'integration'),
+        'username' => env('LEAD_DB_USERNAME', ''),
+        'password' => env('LEAD_DB_PASSWORD', ''),
+        'charset' => 'utf8mb4',
+        'collation' => 'utf8mb4_unicode_ci',
+        'prefix' => '',
+        'strict' => true,
+    ],
+
+    // Shared secret TXNHome sends in the X-TXN-Token header when a lead
+    // arrives (POST /txn/lead-arrived). Empty = the endpoint refuses all.
+    'webhook_token' => env('LEAD_WEBHOOK_TOKEN'),
 
 ];

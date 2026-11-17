@@ -7,7 +7,9 @@ use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Webkul\Admin\Http\Controllers\Lead\LeadWebhookController;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -21,6 +23,10 @@ class AppServiceProvider extends ServiceProvider
         if (! config()->has('mail.mailers.graph')) {
             config(['mail.mailers.graph' => ['transport' => 'graph']]);
         }
+
+        // Lead database (config/lead_triage.php lead_db), added here so the
+        // stock config/database.php stays unchanged. Connects only when used.
+        config(['database.connections.lead_db' => config('lead_triage.lead_db')]);
     }
 
     /**
@@ -28,6 +34,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // TXNHome calls this after saving a lead to the lead database
+        // (LeadWebhookController). "api" group: no session, no CSRF; the
+        // shared token is checked in the controller.
+        Route::post('txn/lead-arrived', LeadWebhookController::class)
+            ->middleware('api')
+            ->name('txn.lead_arrived');
+
         Mail::extend('graph', fn () => new GraphTransport(
             config('graph_mail.tenant_id'),
             config('graph_mail.client_id'),

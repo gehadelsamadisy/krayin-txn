@@ -138,6 +138,80 @@ class LeadCsvImportService
         return $result;
     }
 
+    /**
+     * Rows already in the CSV column shape, from the lead database
+     * (LeadDbImportService). Unlike import(), each lead is saved on its own:
+     * a bad row is skipped and logged, the others still go in.
+     *
+     * @return array{rows: int, created: int, updated: int, unchanged: int, skipped: int, checked: int,
+     *               review: int, check_failed: int, check_left: int, errors: list<string>, dry_run: bool}
+     */
+    public function importRowsSkippingBad(array $rows, bool $dryRun = false): array
+    {
+        $result = [
+            'rows' => count($rows), 'created' => 0, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0,
+            'checked' => 0, 'review' => 0, 'check_failed' => 0, 'check_left' => 0, 'errors' => [], 'dry_run' => $dryRun,
+        ];
+
+        $started = microtime(true);
+        $touched = [];
+
+        foreach (array_values($rows) as $index => $values) {
+            $row = ['line' => $index + 1] + array_map(fn ($value) => trim((string) $value), $values);
+            $label = ($row['source'] ?? '?').' '.($row['source_lead_id'] ?? '?');
+
+            if ($error = $this->validate($row)) {
+                $result['skipped']++;
+                $result['errors'][] = "{$label}: {$error}";
+                Log::warning("Lead DB import: skipped {$label}: {$error}");
+
+                continue;
+            }
+
+            DB::beginTransaction();
+
+            try {
+                [$status, $leadId] = $this->upsert($row);
+                $dryRun ? DB::rollBack() : DB::commit();
+            } catch (Throwable $exception) {
+                DB::rollBack();
+                $reason = $exception->errorInfo[2] ?? $exception->getMessage();
+                $result['skipped']++;
+                $result['errors'][] = "{$label}: {$reason}";
+                Log::error("Lead DB import: skipped {$label}.", ['exception' => $exception]);
+
+                continue;
+            }
+
+            $result[$status]++;
+
+            if ($status !== 'unchanged' && ! $dryRun) {
+                $touched[] = $leadId;
+            }
+        }
+
+        // Same lead check and time budget as import().
+        $deadline = $started + config('lead_triage.import.check_seconds', 200);
+
+        foreach ($touched as $leadId) {
+            if (microtime(true) >= $deadline) {
+                $result['check_left']++;
+
+                continue;
+            }
+
+            try {
+                $this->triage->check(Lead::findOrFail($leadId))['review'] && $result['review']++;
+                $result['checked']++;
+            } catch (Throwable $exception) {
+                $result['check_failed']++;
+                Log::warning("Lead DB import: lead check failed for lead {$leadId}.", ['error' => $exception->getMessage()]);
+            }
+        }
+
+        return $result;
+    }
+
     // ---------------------------------------------------------------------
     // Read and validate
     // ---------------------------------------------------------------------
@@ -417,7 +491,7 @@ class LeadCsvImportService
     }
 
     /** Same rule as Krayin's PersonRepository: owner|organization|first email[|first phone]. */
-    private static function uniqueId(Person $person): string
+    public static function uniqueId(Person $person): string
     {
         $id = implode('|', array_filter([$person->user_id, $person->organization_id, $person->emails[0]['value'] ?? null]));
         $phone = collect($person->contact_numbers ?? [])->first()['value'] ?? null;

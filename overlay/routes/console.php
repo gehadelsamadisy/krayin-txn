@@ -144,4 +144,49 @@ Artisan::command('txn:follow-ups {--dry-run : show what is due, send and change 
         .($counts->isNotEmpty() ? ': '.$counts->map(fn ($n, $action) => "{$n} {$action}")->implode(', ') : '').'.');
 })->purpose('Send due booking-link follow-ups (24h reminder, 72h final) and mark unanswered leads Lost');
 
+// Leads from the lead database (MySQL integration, filled by TXNHome). TXNHome
+// also calls /txn/lead-arrived for each new lead; this is the catch-up for
+// leads that call missed (run hourly from the server's cron) and for manual runs.
+Artisan::command('txn:import-leads {--hours=48 : leads received in the last N hours} {--all : every lead} {--lead= : one lead, SOURCE:ID (e.g. YELP:abc123)} {--dry-run : show the results, save nothing}', function (Webkul\Admin\Support\Contact\LeadDbImportService $import) {
+    $dryRun = (bool) $this->option('dry-run');
+
+    if ($lead = $this->option('lead')) {
+        [$source, $id] = explode(':', $lead, 2) + [1 => ''];
+        $result = $import->importOne($source, $id, $dryRun);
+    } else {
+        $result = $import->importRecent($this->option('all') ? null : (int) $this->option('hours'), $dryRun);
+    }
+
+    foreach ($result['errors'] as $error) {
+        $this->warn("Skipped {$error}");
+    }
+
+    $this->info(($dryRun ? 'DRY RUN, nothing saved. ' : '').now()->toDateTimeString().": {$result['rows']} leads: {$result['created']} new, "
+        ."{$result['updated']} updated, {$result['unchanged']} unchanged, {$result['skipped']} skipped. "
+        ."Lead check: {$result['checked']} checked, {$result['review']} need review"
+        .($result['check_left'] ? ", {$result['check_left']} left for \"Check new leads\"" : '').'.');
+
+    return $result['skipped'] ? 1 : 0;
+})->purpose('Import leads from the lead database (MySQL integration) into Krayin');
+
+// One-time: real emails and phone numbers back on contacts imported while testing.
+// Prints contact ids only (no customer details).
+Artisan::command('txn:restore-contacts {--dry-run : show what would change, save nothing}', function (Webkul\Admin\Support\Contact\LeadDbImportService $import) {
+    $result = $import->restoreContacts((bool) $this->option('dry-run'));
+
+    foreach ($result['errors'] as $error) {
+        $this->warn("Skipped {$error}");
+    }
+
+    if ($result['changed_ids']) {
+        $this->line(($result['dry_run'] ? 'Would change' : 'Changed').' contacts: '.implode(', ', $result['changed_ids']));
+    }
+
+    $this->info(($result['dry_run'] ? 'DRY RUN, nothing saved. ' : '')."{$result['contacts']} contacts with Yelp/Angi leads: "
+        ."{$result['changed']} ".($result['dry_run'] ? 'to change' : 'changed').", {$result['unchanged']} already correct, "
+        ."{$result['not_found']} not in the lead database, {$result['skipped']} skipped.");
+
+    return $result['skipped'] ? 1 : 0;
+})->purpose('Put the real emails and phone numbers from the lead database back on Yelp/Angi contacts');
+
 Schedule::command('inbound-emails:process')->everyFiveMinutes();
