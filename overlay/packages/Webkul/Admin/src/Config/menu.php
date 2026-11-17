@@ -24,6 +24,24 @@ return [
     ],
 
     /**
+     * TXN: worker schedules and routes, one click away (shortcuts to the
+     * Workers pages; own permissions in acl.php).
+     */
+    [
+        'key' => 'worker_schedules',
+        'name' => 'Schedules',
+        'route' => 'admin.contacts.workers.go_schedule',
+        'sort' => 2.1,
+        'icon-class' => 'icon-calendar',
+    ], [
+        'key' => 'worker_routes',
+        'name' => 'Routes',
+        'route' => 'admin.contacts.workers.go_routes',
+        'sort' => 2.2,
+        'icon-class' => 'icon-settings-flow',
+    ],
+
+    /**
      * Quotes.
      */
     [

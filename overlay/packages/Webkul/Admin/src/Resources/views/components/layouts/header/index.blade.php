@@ -43,6 +43,19 @@
             @include('admin::components.layouts.header.mobile.mega-search')
         </div>
         
+        <!-- TXN: worker schedules and routes, one click from every page. -->
+        @if (bouncer()->hasPermission('worker_schedules'))
+            <a href="{{ route('admin.contacts.workers.go_schedule') }}" class="secondary-button whitespace-nowrap max-md:hidden" title="This week's schedule (switch workers on the page)">
+                Schedules
+            </a>
+        @endif
+
+        @if (bouncer()->hasPermission('worker_routes'))
+            <a href="{{ route('admin.contacts.workers.go_routes') }}" class="secondary-button whitespace-nowrap max-md:hidden" title="Today's routes of all workers on the map">
+                Routes
+            </a>
+        @endif
+
         <!-- TXN: Cal.com sync on every page (same action as the button on
              the Workers list, a worker's Schedule and the Person page). -->
         @if (bouncer()->hasPermission('contacts.persons.view'))

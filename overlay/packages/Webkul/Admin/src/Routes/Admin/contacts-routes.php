@@ -86,6 +86,13 @@ Route::prefix('contacts')->group(function () {
 
         Route::get('routes', 'routes')->name('admin.contacts.workers.routes');
 
+        // Shortcuts behind the sidebar items and header buttons "Schedules" and
+        // "Routes" (own permissions, see acl.php). Before the {worker}/... routes
+        // so "go" is never read as a worker id.
+        Route::get('go/schedule', 'goSchedule')->name('admin.contacts.workers.go_schedule');
+
+        Route::get('go/routes', 'goRoutes')->name('admin.contacts.workers.go_routes');
+
         Route::post('', 'store')->name('admin.contacts.workers.store');
 
         Route::get('{worker}/bookings/create', 'createBooking')->name('admin.contacts.workers.bookings.create');

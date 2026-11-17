@@ -78,6 +78,30 @@ class WorkerController extends Controller
     }
 
     /**
+     * "Schedules" (sidebar / header): this week of the first active worker,
+     * by priority then name. The schedule page switches to other workers.
+     */
+    public function goSchedule(): RedirectResponse
+    {
+        $worker = Worker::query()->where('is_active', true)->orderBy('priority')->orderBy('name')->first()
+            ?? Worker::query()->orderBy('name')->first();
+
+        if (! $worker) {
+            return redirect()
+                ->route('admin.contacts.workers.index')
+                ->with('warning', 'There are no workers yet. Add a worker to see a schedule.');
+        }
+
+        return redirect()->route('admin.contacts.workers.schedule', $worker->id);
+    }
+
+    /** "Routes" (sidebar / header): today's routes of all workers. */
+    public function goRoutes(): RedirectResponse
+    {
+        return redirect()->route('admin.contacts.workers.routes');
+    }
+
+    /**
      * One worker's week (Monday to Sunday) as a calendar: work hours,
      * holidays, time off, appointments and the slot times still open.
      * Activity times are stored as wall time in the slot finder's time zone,

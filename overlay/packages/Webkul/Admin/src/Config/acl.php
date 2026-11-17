@@ -32,6 +32,18 @@ return [
         'route' => ['admin.leads.delete', 'admin.leads.mass_delete'],
         'sort' => 4,
     ], [
+        // TXN: the "Schedules" / "Routes" sidebar items and header buttons.
+        // The pages they open still need the Workers permission.
+        'key' => 'worker_schedules',
+        'name' => 'Schedules',
+        'route' => 'admin.contacts.workers.go_schedule',
+        'sort' => 2.1,
+    ], [
+        'key' => 'worker_routes',
+        'name' => 'Routes',
+        'route' => 'admin.contacts.workers.go_routes',
+        'sort' => 2.2,
+    ], [
         'key' => 'quotes',
         'name' => 'admin::app.acl.quotes',
         'route' => 'admin.quotes.index',
