@@ -145,8 +145,9 @@ Artisan::command('txn:follow-ups {--dry-run : show what is due, send and change 
 })->purpose('Send due booking-link follow-ups (24h reminder, 72h final) and mark unanswered leads Lost');
 
 // Leads from the lead database (MySQL integration, filled by TXNHome). TXNHome
-// also calls /txn/lead-arrived for each new lead; this is the catch-up for
-// leads that call missed (run hourly from the server's cron) and for manual runs.
+// also calls /txn/lead-arrived for each new lead and retries that call for
+// about 12 minutes; this command (and the "Import from lead database" button)
+// is the manual catch-up. No cron runs it.
 Artisan::command('txn:import-leads {--hours=48 : leads received in the last N hours} {--all : every lead} {--lead= : one lead, SOURCE:ID (e.g. YELP:abc123)} {--dry-run : show the results, save nothing}', function (Webkul\Admin\Support\Contact\LeadDbImportService $import) {
     $dryRun = (bool) $this->option('dry-run');
 

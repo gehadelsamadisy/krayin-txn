@@ -42,7 +42,7 @@ class LeadWebhookController
             try {
                 $result = app(LeadDbImportService::class)->importOne($source, $sourceLeadId);
             } catch (Throwable $exception) {
-                // The hourly txn:import-leads picks it up later.
+                // Not retried here: "Import from lead database" or txn:import-leads brings it in.
                 Log::error("Lead webhook {$source} {$sourceLeadId}: import failed.", ['exception' => $exception]);
 
                 return;
