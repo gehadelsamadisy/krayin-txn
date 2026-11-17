@@ -111,14 +111,14 @@ try {
     // =====================================================================
     // Today's wording, as BookingEmail wrote it before the templates.
     $me = 'This is Sam Rep with TXN Home Services';
-    $call = 'call or text us at (713) 555-0100';
+    $callText = 'call or text us at (713) 555-0100';
     $closing = "Times are in Central Time. The booking page also asks for any details we still need. The link can be used once; after you book you'll get a confirmation email with options to reschedule or cancel.";
     $signature = "Sam Rep\nTXN Home Services\nCell: (713) 555-0100\nOffice: (713) 555-0199";
     $expected = [
         'link' => ['Choose a time for your free estimate | TXN Home Services', "{$me}. Thank you for reaching out about your gutter project. We have these times open for your free, no-obligation estimate:", $closing, $times, $url],
         'reminder' => ['Still looking for a time for your free estimate? | TXN Home Services', "{$me}, following up on your gutter request. We'd still be happy to schedule your free, no-obligation estimate. These times are open:", $closing, $times, $url],
-        'reminder (no times)' => ['Still looking for a time for your free estimate? | TXN Home Services', "{$me}, following up on your gutter request. We'd still be happy to schedule your free, no-obligation estimate; just {$call} and we'll find a time that works for you.", '', [], null],
-        'final' => ['Checking in about your estimate | TXN Home Services', "{$me}, checking in one last time about your gutter request. If you still need help, just {$call} and we'll get your free, no-obligation estimate scheduled.", '', [], null],
+        'reminder (no times)' => ['Still looking for a time for your free estimate? | TXN Home Services', "{$me}, following up on your gutter request. We'd still be happy to schedule your free, no-obligation estimate; just {$callText} and we'll find a time that works for you.", '', [], null],
+        'final' => ['Checking in about your estimate | TXN Home Services', "{$me}, checking in one last time about your gutter request. If you still need help, just {$callText} and we'll get your free, no-obligation estimate scheduled.", '', [], null],
     ];
 
     foreach ($expected as $label => [$subject, $intro, $close, $slots, $link]) {
