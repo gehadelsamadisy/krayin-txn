@@ -16,7 +16,7 @@ use Webkul\Contact\Models\Person;
  *
  * Raw Lead → Needs Review → (roof: Waiting for Roof Report → Roof Report
  * Received) → Contacted → Appointment Scheduled → Canceled → Visit Done →
- * Estimate Sent → Won – Job Sold → Lost. Stage codes are the old ones (only
+ * Estimate Sent → Won - Job Sold → Lost. Stage codes are the old ones (only
  * the names changed), e.g. Visit Done is still `prospect`. Visit Done,
  * Estimate Sent and Won are set by staff on the board (Cal.com visits are
  * read-only in Krayin, so nothing ticks them done).

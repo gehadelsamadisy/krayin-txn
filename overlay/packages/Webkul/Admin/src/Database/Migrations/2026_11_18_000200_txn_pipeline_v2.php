@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
  *
  *   Raw Lead → Needs Review → (roof: Waiting for Roof Report → Roof Report
  *   Received) → Contacted → Appointment Scheduled → Canceled → Visit Done →
- *   Estimate Sent → Won – Job Sold → Lost
+ *   Estimate Sent → Won - Job Sold → Lost
  *
  * Stage codes stay the same (only names change), so code that moves leads by
  * code keeps working. Removed: Pre-Qualified and Krayin's Follow-up (leads →
@@ -31,7 +31,7 @@ return new class extends Migration
         'appointment-canceled' => 'Canceled',
         'prospect'             => 'Visit Done',
         'negotiation'          => 'Estimate Sent',
-        'won'                  => 'Won – Job Sold',
+        'won'                  => 'Won - Job Sold',
     ];
 
     /** Removed stage => where its leads go. */
@@ -233,19 +233,24 @@ return new class extends Migration
         DB::table('lead_pipeline_stages')->where('id', $stageId)->delete();
     }
 
-    /** TXN stages first in ORDER; any other stage (made by staff) after them, in its old order. */
+    /**
+     * TXN stages first in ORDER; any other stage (made by staff) after them,
+     * in its old order: 1, 2, 3 ... with no repeats (Krayin's board keys its
+     * columns by position, so a repeat hides a column).
+     */
     private function reorder(int $pipelineId): void
     {
-        $position = 0;
+        $stages = $this->stages($pipelineId)->get(['id', 'code', 'sort_order']);
+        $rank = array_flip(self::ORDER);
 
-        foreach (self::ORDER as $code) {
-            if ($this->stages($pipelineId)->where('code', $code)->update(['sort_order' => $position + 1])) {
-                $position++;
-            }
-        }
+        $sorted = $stages->sortBy([
+            fn ($a, $b) => ($rank[$a->code] ?? PHP_INT_MAX) <=> ($rank[$b->code] ?? PHP_INT_MAX),
+            fn ($a, $b) => $a->sort_order <=> $b->sort_order,
+            fn ($a, $b) => $a->id <=> $b->id,
+        ])->values();
 
-        foreach ($this->stages($pipelineId)->whereNotIn('code', self::ORDER)->orderBy('sort_order')->pluck('id') as $id) {
-            DB::table('lead_pipeline_stages')->where('id', $id)->update(['sort_order' => ++$position]);
+        foreach ($sorted as $index => $stage) {
+            DB::table('lead_pipeline_stages')->where('id', $stage->id)->update(['sort_order' => $index + 1]);
         }
     }
 };

@@ -134,7 +134,7 @@ try {
     $expectedNames = [
         'new' => 'Raw Lead', 'needs-review' => 'Needs Review', 'contacted' => 'Contacted',
         'appointment-set' => 'Appointment Scheduled', 'appointment-canceled' => 'Canceled',
-        'prospect' => 'Visit Done', 'negotiation' => 'Estimate Sent', 'won' => 'Won – Job Sold', 'lost' => 'Lost',
+        'prospect' => 'Visit Done', 'negotiation' => 'Estimate Sent', 'won' => 'Won - Job Sold', 'lost' => 'Lost',
     ];
     foreach ([$defaultId => 'Main', $roofId => 'Roof'] as $pipelineId => $label) {
         $actual = array_intersect_key($names($pipelineId), $expectedNames);
@@ -143,6 +143,11 @@ try {
         ksort($wanted);
         $check("{$label} pipeline: stage names", $actual === $wanted, json_encode($actual));
     }
+
+    // Krayin's board keys its columns by position: a repeated number hides a column.
+    $repeats = DB::table('lead_pipeline_stages')->select('lead_pipeline_id', 'sort_order')
+        ->groupBy('lead_pipeline_id', 'sort_order')->havingRaw('COUNT(*) > 1')->get();
+    $check('Every stage position is unique within its pipeline (no hidden board columns)', $repeats->isEmpty(), $repeats->toJson());
 
     $removed = DB::table('lead_pipeline_stages')->whereIn('code', ['pre-qualified', 'follow-up', 'appointment-rescheduled', 'appointment-confirmed'])->count();
     $check('Removed stages are gone from every pipeline', $removed === 0, "{$removed} left");

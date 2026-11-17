@@ -448,7 +448,7 @@ The stages (migrations `2026_11_05_000100_add_txn_lead_stages`,
 | Canceled | `appointment-canceled` | Cal.com cancellation |
 | Visit Done | `prospect` | staff |
 | Estimate Sent | `negotiation` | staff |
-| Won – Job Sold | `won` | staff |
+| Won - Job Sold | `won` | staff |
 | Lost | `lost` | follow-ups ran out (`txn:follow-ups`), or staff |
 
 Codes are the old ones (v2 only renamed stages), so a stage can be renamed in
