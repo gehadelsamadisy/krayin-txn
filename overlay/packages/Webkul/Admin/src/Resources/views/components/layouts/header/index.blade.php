@@ -46,13 +46,13 @@
         <!-- TXN: worker schedules and routes, one click from every page. -->
         @if (bouncer()->hasPermission('worker_schedules'))
             <a href="{{ route('admin.contacts.workers.go_schedule') }}" class="secondary-button whitespace-nowrap max-md:hidden" title="This week's schedule (switch workers on the page)">
-                Schedules
+                Workers Schedules
             </a>
         @endif
 
         @if (bouncer()->hasPermission('worker_routes'))
             <a href="{{ route('admin.contacts.workers.go_routes') }}" class="secondary-button whitespace-nowrap max-md:hidden" title="Today's routes of all workers on the map">
-                Routes
+                Workers Routes
             </a>
         @endif
 

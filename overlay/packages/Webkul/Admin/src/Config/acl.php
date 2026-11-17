@@ -35,12 +35,12 @@ return [
         // TXN: the "Schedules" / "Routes" sidebar items and header buttons.
         // The pages they open still need the Workers permission.
         'key' => 'worker_schedules',
-        'name' => 'Schedules',
+        'name' => 'Workers Schedules',
         'route' => 'admin.contacts.workers.go_schedule',
         'sort' => 2.1,
     ], [
         'key' => 'worker_routes',
-        'name' => 'Routes',
+        'name' => 'Workers Routes',
         'route' => 'admin.contacts.workers.go_routes',
         'sort' => 2.2,
     ], [
