@@ -56,7 +56,7 @@ class AppServiceProvider extends ServiceProvider
         // Re-run the lead check when the contact or lead is edited, so
         // "Missing Info" etc. follow the new phone/address. Lead edits count
         // only from the edit form and the inline fields: a stage change must
-        // not re-check (it could push a lead straight back to Pre-Qualified).
+        // not re-check (it could undo a stage staff just set).
         Event::listen('contacts.person.update.after', fn ($person) => app(\Webkul\Admin\Support\Contact\LeadTriageService::class)->recheckAfterEdit($person));
         Event::listen('lead.update.after', function ($lead) {
             if (request()->routeIs('admin.leads.update', 'admin.leads.attributes.update')) {

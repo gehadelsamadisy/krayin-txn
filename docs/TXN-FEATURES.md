@@ -294,16 +294,19 @@ Results go into the lead fields Service Category, Flow, Location Check,
 Missing Info, Next Action and Checked At (migration
 `2026_11_05_000200_add_lead_triage_attributes`; written directly, not into the
 lead history, since they're recalculated each time), and the full result is
-shown under the lead title. Leads in Raw Lead or Pre-Qualified:
+shown under the lead title. Leads in Raw Lead, Needs Review or the two roof
+stages:
 
 | Result | What happens |
 | --- | --- |
-| Service known, standard flow, in area, has an email | Next Action "Send booking link (it asks for: ...)", stage → Pre-Qualified (from Raw Lead), "Needs review" tag removed |
-| Roof replacement, nothing else wrong | Next Action "Get the roof report ..., then move the lead to Roof Report Received", lead → Roof Replacement pipeline, Waiting for Roof Report (from Raw Lead or Pre-Qualified), "Needs review" tag removed. In Roof Report Received the check treats it like a standard lead ("Send booking link") |
-| Unknown service, out of area, no address or ZIP, no email, location lookup failed | Next Action "Review: <reasons>", tag "Needs review" |
+| Service known, standard flow, in area, has an email | Next Action "Send booking link (it asks for: ...)", stays in / goes back to Raw Lead (from Needs Review), "Needs review" tag removed |
+| Roof replacement, nothing else wrong | Next Action "Get the roof report ..., then move the lead to Roof Report Received", lead → Roof Replacement pipeline, Waiting for Roof Report (from Raw Lead or Needs Review), "Needs review" tag removed. In Roof Report Received the check treats it like a standard lead ("Send booking link") |
+| Unknown service, out of area, no address or ZIP, no email, location lookup failed | Next Action "Review: <reasons>", stage → Needs Review (from Raw Lead or Waiting for Roof Report; a lead in Roof Report Received stays there), tag "Needs review" |
 
-Leads past Pre-Qualified are checked but not moved or tagged ("None: the lead
-is ..."). Running it again changes nothing that is already clean.
+Leads past those stages are checked but not moved or tagged ("None: the lead
+is ..."). Running it again changes nothing that is already clean. "Check new
+leads" and `txn:triage-leads --new` check every lead in Raw Lead and Needs
+Review.
 
 The booking link now also asks for a **phone number** whenever the contact has
 no usable one (a Cal.com phone question, `txn_person_{id}_phone`); the sync adds
@@ -430,38 +433,58 @@ follow-ups come with Twilio.
 
 ### Lead stages and worker emails
 
-Migration `2026_11_05_000100_add_txn_lead_stages` adds the CRM-spec stages to
-the default pipeline: Raw Lead (Krayin's "New", renamed; code `new`),
-Contacted, Pre-Qualified, Appointment Set, Appointment Rescheduled, Appointment
-Confirmed, Appointment Canceled, then Krayin's Follow Up, Prospect,
-Negotiation, Won and Lost.
+The stages (migrations `2026_11_05_000100_add_txn_lead_stages`,
+`2026_11_08_000100_create_roof_replacement_pipeline` and
+`2026_11_18_000200_txn_pipeline_v2`), in board order:
+
+| Stage | Code | Set by |
+| --- | --- | --- |
+| Raw Lead | `new` | import; lead check passed |
+| Needs Review | `needs-review` | lead check found a problem |
+| Waiting for Roof Report *(roof pipeline)* | `waiting-roof-report` | lead check: roof replacement |
+| Roof Report Received *(roof pipeline)* | `roof-report-received` | staff, once the report is attached |
+| Contacted | `contacted` | booking link sent |
+| Appointment Scheduled | `appointment-set` | Cal.com booking or reschedule |
+| Canceled | `appointment-canceled` | Cal.com cancellation |
+| Visit Done | `prospect` | staff |
+| Estimate Sent | `negotiation` | staff |
+| Won – Job Sold | `won` | staff |
+| Lost | `lost` | follow-ups ran out (`txn:follow-ups`), or staff |
+
+Codes are the old ones (v2 only renamed stages), so a stage can be renamed in
+Settings without breaking anything. v2 removed Pre-Qualified and Krayin's
+Follow Up (their leads → Raw Lead) and Appointment Rescheduled / Appointment
+Confirmed (→ Appointment Scheduled), and moved open leads with the "Needs
+review" tag to Needs Review. Every stage and every moved lead was saved first
+(tables `txn_stage_snapshots` and `txn_stage_moves`), so rolling the migration
+back restores the old stages and puts back each lead that hasn't moved since.
 
 Roof replacement can't be booked before the roof report, so roof leads live
-in their own pipeline: migration `2026_11_08_000100_create_roof_replacement_pipeline`
-adds a **Roof Replacement** pipeline with the same stages (same codes) plus
-**Waiting for Roof Report** and **Roof Report Received** after Pre-Qualified.
-Only roof leads show those stages; on the Leads board switch pipelines with
-Krayin's pipeline selector. The lead check moves roof replacements into it;
-staff move a lead to Roof Report Received by hand once the report is attached;
-a lead whose service is corrected away from roof replacement goes back to the
-default pipeline's Pre-Qualified. The roof pipeline is found by its stage
-code, so it can be renamed in Settings.
+in their own **Roof Replacement** pipeline (same codes, plus the two roof
+stages). On the Leads board switch pipelines with Krayin's pipeline selector.
+A lead whose service is corrected away from roof replacement goes back to the
+default pipeline's Raw Lead. The roof pipeline is found by its stage code, so
+it can be renamed in Settings.
 
-`Support\Contact\LeadStageService` moves all of the person's leads except won
-and lost ones (by stage code, within the lead's own pipeline unless noted):
+`Support\Contact\LeadStageService` moves the person's leads, never won or lost
+ones (by stage code, within the lead's own pipeline unless noted):
 
 | Event | Stage |
 | --- | --- |
-| Lead check passed | Pre-Qualified, only from Raw Lead |
-| Lead check: roof replacement | Roof Replacement pipeline → Waiting for Roof Report, only from Raw Lead or Pre-Qualified |
-| Lead check: roof-stage lead whose service is no longer roof replacement | Default pipeline → Pre-Qualified |
-| Booking link emailed (not when sending failed) | Contacted, only from Raw Lead, Pre-Qualified, Roof Report Received or Appointment Canceled |
-| Booking synced for the first time | Appointment Set |
-| Booking moved to another time | Appointment Rescheduled |
-| Booking cancelled | Appointment Canceled |
+| Lead check found a problem | Needs Review, only from Raw Lead or Waiting for Roof Report |
+| Lead check passed after a fix | Raw Lead, only from Needs Review |
+| Lead check: roof replacement | Roof Replacement pipeline → Waiting for Roof Report, only from Raw Lead or Needs Review |
+| Lead check: roof-pipeline lead whose service is no longer roof replacement | Default pipeline → Raw Lead |
+| Booking link emailed (not when sending failed) | Contacted, only from Raw Lead, Needs Review, Roof Report Received or Canceled |
+| Booking synced for the first time, or moved to another time | Appointment Scheduled |
+| Booking cancelled | Canceled |
+| Follow-ups ran out | Lost, only from Contacted |
 
-Appointment Confirmed is set by staff for now (no rule for it yet). Each move is written to the lead's history ("Updated Stage : A → B",
-with the time), since Krayin logs stage changes made in its UI but not ones made in code.
+Visit Done, Estimate Sent and Won are set by staff on the board (Cal.com
+visits are read-only in Krayin). Each move is written to the lead's history
+("Updated Stage : A → B", with the time), since Krayin logs stage changes made
+in its UI but not ones made in code; the v2 migration's own moves are logged
+in `txn_stage_moves` instead.
 
 `Support\Contact\WorkerVisitNotifier` emails the workers (their roster email)
 after the sync saves the change: booked → the assigned worker; moved → the

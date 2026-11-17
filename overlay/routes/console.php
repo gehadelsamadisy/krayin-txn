@@ -76,7 +76,7 @@ Artisan::command('txn:check-schedules {--from= : first day, YYYY-MM-DD (default 
     return $problems ? 1 : 0;
 })->purpose('List conflicts in the workers\' schedules (overlaps, bad times, visits outside hours)');
 
-Artisan::command('txn:triage-leads {--lead=* : only these lead ids} {--new : only leads in Raw Lead} {--dry-run : show the results, change nothing}', function (Webkul\Admin\Support\Contact\LeadTriageService $triage) {
+Artisan::command('txn:triage-leads {--lead=* : only these lead ids} {--new : only leads in Raw Lead or Needs Review} {--dry-run : show the results, change nothing}', function (Webkul\Admin\Support\Contact\LeadTriageService $triage) {
     $query = Webkul\Lead\Models\Lead::query()->with('stage')->orderBy('id');
 
     if ($ids = $this->option('lead')) {
@@ -84,7 +84,10 @@ Artisan::command('txn:triage-leads {--lead=* : only these lead ids} {--new : onl
     }
 
     if ($this->option('new')) {
-        $query->whereHas('stage', fn ($stage) => $stage->where('code', 'new'));
+        $query->whereHas('stage', fn ($stage) => $stage->whereIn('code', [
+            Webkul\Admin\Support\Contact\LeadStageService::RAW_LEAD,
+            Webkul\Admin\Support\Contact\LeadStageService::NEEDS_REVIEW,
+        ]));
     }
 
     $dryRun = (bool) $this->option('dry-run');

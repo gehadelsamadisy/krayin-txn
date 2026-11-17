@@ -26,7 +26,7 @@
         <form method="POST" action="{{ route('admin.leads.triage_new') }}">
             @csrf
 
-            <button type="submit" class="secondary-button" title="Check every lead in Raw Lead: clean the data, classify the service, check the location">
+            <button type="submit" class="secondary-button" title="Check every lead in Raw Lead and Needs Review: clean the data, classify the service, check the location">
                 Check new leads
             </button>
         </form>

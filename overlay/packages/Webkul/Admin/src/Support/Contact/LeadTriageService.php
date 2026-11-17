@@ -13,20 +13,20 @@ use Webkul\Tag\Models\TagProxy;
  * check the location, then decide the next action (config/lead_triage.php).
  *
  * Results go into the lead's "Service Category", "Flow", "Location Check",
- * "Missing Info", "Next Action" and "Checked At" fields. A Raw Lead that is
- * ready for a booking link moves to Pre-Qualified; a roof replacement moves
- * into the Roof Replacement pipeline at "Waiting for Roof Report" (staff move
- * it to "Roof Report Received" once the report is in); one that can't go on
- * gets the "Needs review" tag with
- * the reason in Next Action. Leads already contacted or further along are
- * checked but not moved or tagged.
+ * "Missing Info", "Next Action" and "Checked At" fields. A lead that can't
+ * go on moves to "Needs Review" and gets the "Needs review" tag, with the
+ * reason in Next Action; once fixed, a re-check moves it back to Raw Lead
+ * (ready for a booking link). A roof replacement moves into the Roof
+ * Replacement pipeline at "Waiting for Roof Report" (staff move it to "Roof
+ * Report Received" once the report is in). Leads already contacted or
+ * further along are checked but not moved or tagged.
  */
 final class LeadTriageService
 {
     /** Stages where the check decides what happens next. */
     private const OPEN_STAGES = [
-        'new',
-        LeadStageService::PRE_QUALIFIED,
+        LeadStageService::RAW_LEAD,
+        LeadStageService::NEEDS_REVIEW,
         LeadStageService::WAITING_ROOF_REPORT,
         LeadStageService::ROOF_REPORT_RECEIVED,
     ];
@@ -53,7 +53,7 @@ final class LeadTriageService
     /**
      * Re-runs the check after a contact or lead is edited, so "Missing Info",
      * "Location Check" and "Next Action" follow the new phone, address, etc.
-     * The check itself can fire lead.update.after (moving to Pre-Qualified),
+     * The check itself can fire lead.update.after (moving the lead's stage),
      * so nested calls are ignored. A failure is logged, never shown: the
      * user's edit is already saved and must not turn into an error page.
      */
@@ -155,13 +155,15 @@ final class LeadTriageService
             $this->setReviewTag($lead, $review);
         }
 
-        $inRoofStage = in_array($stageCode, [LeadStageService::WAITING_ROOF_REPORT, LeadStageService::ROOF_REPORT_RECEIVED], true);
-        $moved = $open && ! $review && match (true) {
+        $moved = $open && match (true) {
+            // Something a person has to fix (reason in Next Action).
+            $review => $this->stages->needsReview($lead),
             // Into the Roof Replacement pipeline (only roof leads have those stages).
             $needsRoofReport => $this->stages->waitingForRoofReport($lead),
-            // Service corrected away from roof replacement: back to the main pipeline.
-            $inRoofStage && $flow !== 'roof_report' => $this->stages->backToStandard($lead),
-            default => $this->stages->preQualified($lead),
+            // Service corrected away from roof replacement: back to the main pipeline's Raw Lead.
+            $flow !== 'roof_report' && $this->stages->inRoofPipeline($lead) => $this->stages->backToStandard($lead),
+            // Fixed: Needs Review → Raw Lead (ready for a booking link).
+            default => $this->stages->readyForLink($lead),
         };
 
         return [

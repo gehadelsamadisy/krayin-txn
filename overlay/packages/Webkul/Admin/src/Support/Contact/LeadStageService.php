@@ -9,23 +9,34 @@ use Webkul\Contact\Models\Person;
 
 /**
  * Moves a person's open leads to the TXN stage that matches what just
- * happened (migration 2026_11_05_000100_add_txn_lead_stages). Won and lost
- * leads are never moved. Each move is recorded in the lead's history (a
- * "system" activity with the old and new stage and the time).
+ * happened (stages: migrations 2026_11_05_000100_add_txn_lead_stages and
+ * 2026_11_18_000200_txn_pipeline_v2). Won and lost leads are never moved.
+ * Each move is recorded in the lead's history (a "system" activity with the
+ * old and new stage and the time).
+ *
+ * Raw Lead → Needs Review → (roof: Waiting for Roof Report → Roof Report
+ * Received) → Contacted → Appointment Scheduled → Canceled → Visit Done →
+ * Estimate Sent → Won – Job Sold → Lost. Stage codes are the old ones (only
+ * the names changed), e.g. Visit Done is still `prospect`. Visit Done,
+ * Estimate Sent and Won are set by staff on the board (Cal.com visits are
+ * read-only in Krayin, so nothing ticks them done).
  */
 final class LeadStageService
 {
+    public const RAW_LEAD = 'new';
+
+    /** The lead check found a problem a person has to look at. */
+    public const NEEDS_REVIEW = 'needs-review';
+
     public const CONTACTED = 'contacted';
 
+    /** "Appointment Scheduled" (code from when it was "Appointment Set"). */
     public const APPOINTMENT_SET = 'appointment-set';
 
-    public const APPOINTMENT_RESCHEDULED = 'appointment-rescheduled';
-
+    /** "Canceled". */
     public const APPOINTMENT_CANCELED = 'appointment-canceled';
 
     private const CLOSED = ['won', 'lost'];
-
-    public const PRE_QUALIFIED = 'pre-qualified';
 
     /** Roof replacement: waiting for the roof report (set by the lead check). */
     public const WAITING_ROOF_REPORT = 'waiting-roof-report';
@@ -33,7 +44,8 @@ final class LeadStageService
     /** Roof replacement: report in (set by staff); a booking link can follow. */
     public const ROOF_REPORT_RECEIVED = 'roof-report-received';
 
-    private const LINK_SENT_FROM = ['new', self::PRE_QUALIFIED, self::ROOF_REPORT_RECEIVED, self::APPOINTMENT_CANCELED];
+    /** Staff may still send a link by hand to a lead in Needs Review. */
+    private const LINK_SENT_FROM = [self::RAW_LEAD, self::NEEDS_REVIEW, self::ROOF_REPORT_RECEIVED, self::APPOINTMENT_CANCELED];
 
     /**
      * Booking link emailed: only leads not yet contacted, or whose appointment
@@ -46,27 +58,48 @@ final class LeadStageService
             : $this->move($person, self::CONTACTED, self::LINK_SENT_FROM);
     }
 
-    /** Lead check passed (service known, location fine, can be sent a link): only from Raw Lead. */
-    public function preQualified($lead): bool
+    /** Lead check passed after a problem was fixed: Needs Review → Raw Lead (ready for a booking link). */
+    public function readyForLink($lead): bool
     {
-        return $this->moveLead($lead, self::PRE_QUALIFIED, ['new']);
+        return $this->moveLead($lead, self::RAW_LEAD, [self::NEEDS_REVIEW]);
+    }
+
+    /**
+     * Lead check found a problem: into Needs Review, in the lead's own
+     * pipeline. A lead in Roof Report Received stays there (only tagged), so
+     * fixing the problem doesn't send it back to Waiting for Roof Report.
+     */
+    public function needsReview($lead): bool
+    {
+        return $this->moveLead($lead, self::NEEDS_REVIEW, [self::RAW_LEAD, self::WAITING_ROOF_REPORT]);
     }
 
     /**
      * Lead check: roof replacement with nothing else wrong. Moves it from Raw
-     * Lead or Pre-Qualified into the Roof Replacement pipeline (the one with
+     * Lead or Needs Review into the Roof Replacement pipeline (the one with
      * the roof stages; migration 2026_11_08_000100), so only roof leads show
      * those stages.
      */
     public function waitingForRoofReport($lead): bool
     {
-        return $this->moveLead($lead, self::WAITING_ROOF_REPORT, ['new', self::PRE_QUALIFIED], $this->roofPipelineId());
+        return $this->moveLead($lead, self::WAITING_ROOF_REPORT, [self::RAW_LEAD, self::NEEDS_REVIEW], $this->roofPipelineId());
     }
 
-    /** Lead check: a roof-pipeline lead whose service is no longer roof replacement goes back to the main pipeline. */
+    /** Lead check: a roof-pipeline lead whose service is no longer roof replacement goes back to the main pipeline's Raw Lead. */
     public function backToStandard($lead): bool
     {
-        return $this->moveLead($lead, self::PRE_QUALIFIED, [self::WAITING_ROOF_REPORT, self::ROOF_REPORT_RECEIVED], $this->defaultPipelineId());
+        if (! $this->inRoofPipeline($lead)) {
+            return false;
+        }
+
+        return $this->moveLead($lead, self::RAW_LEAD, [self::RAW_LEAD, self::NEEDS_REVIEW, self::WAITING_ROOF_REPORT, self::ROOF_REPORT_RECEIVED], $this->defaultPipelineId());
+    }
+
+    public function inRoofPipeline($lead): bool
+    {
+        $roofId = $this->roofPipelineId();
+
+        return $roofId !== null && (int) $lead->lead_pipeline_id === $roofId;
     }
 
     /** The pipeline that has the roof stages (found by stage code, so renaming it is fine). */
@@ -105,9 +138,10 @@ final class LeadStageService
         return $lead ? (int) $this->moveLead($lead, self::APPOINTMENT_SET) : $this->move($person, self::APPOINTMENT_SET);
     }
 
+    /** A reschedule keeps (or puts) the lead in Appointment Scheduled; the new time is on the visit itself. */
     public function rescheduled(Person $person, $lead = null): int
     {
-        return $lead ? (int) $this->moveLead($lead, self::APPOINTMENT_RESCHEDULED) : $this->move($person, self::APPOINTMENT_RESCHEDULED);
+        return $lead ? (int) $this->moveLead($lead, self::APPOINTMENT_SET) : $this->move($person, self::APPOINTMENT_SET);
     }
 
     public function canceled(Person $person, $lead = null): int
@@ -139,7 +173,11 @@ final class LeadStageService
         $lead->loadMissing('stage', 'pipeline.stages');
         $current = $lead->stage?->code;
 
-        if (in_array($current, self::CLOSED, true) || $current === $code) {
+        // Same code counts as "already there" only within the same pipeline
+        // (Raw Lead in Roof Replacement → Raw Lead in the main pipeline is a move).
+        $samePipeline = $pipelineId === null || (int) $lead->lead_pipeline_id === $pipelineId;
+
+        if (in_array($current, self::CLOSED, true) || ($current === $code && $samePipeline)) {
             return false;
         }
 

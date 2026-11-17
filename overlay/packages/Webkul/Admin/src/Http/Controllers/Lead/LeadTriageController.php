@@ -9,6 +9,7 @@ use Throwable;
 use Webkul\Admin\Http\Controllers\Controller;
 use Webkul\Admin\Support\Contact\LeadCsvImportService;
 use Webkul\Admin\Support\Contact\LeadDbImportService;
+use Webkul\Admin\Support\Contact\LeadStageService;
 use Webkul\Admin\Support\Contact\LeadTriageService;
 use Webkul\Lead\Models\Lead;
 
@@ -31,13 +32,15 @@ class LeadTriageController extends Controller
     }
 
     /**
-     * Every lead in Raw Lead, until the time budget runs out (each check can
-     * look up a map location; the server stops requests after 300 s). Leads
-     * left over stay in Raw Lead for the next click.
+     * Every lead in Raw Lead or Needs Review, until the time budget runs out
+     * (each check can look up a map location; the server stops requests
+     * after 300 s). Leads left over stay where they are for the next click.
      */
     public function checkNew(LeadTriageService $triage): RedirectResponse
     {
-        $leads = Lead::query()->whereHas('stage', fn ($query) => $query->where('code', 'new'))->orderBy('id')->get();
+        $leads = Lead::query()
+            ->whereHas('stage', fn ($query) => $query->whereIn('code', [LeadStageService::RAW_LEAD, LeadStageService::NEEDS_REVIEW]))
+            ->orderBy('id')->get();
         $deadline = microtime(true) + config('lead_triage.import.check_seconds', 200);
         $ready = $review = $left = 0;
 
