@@ -299,6 +299,21 @@ return [
         'route' => 'admin.settings.tags.index',
         'sort' => 1,
         'icon-class' => 'icon-settings-tag',
+    ], [
+        // TXN: settings for the TXN automation (more screens will join this group).
+        'key' => 'settings.txn',
+        'name' => 'TXN Settings',
+        'info' => 'Rules and settings for the TXN lead automation.',
+        'route' => 'admin.settings.txn.stage_rules',
+        'sort' => 5,
+        'icon-class' => '',
+    ], [
+        'key' => 'settings.txn.stage_rules',
+        'name' => 'Stage rules',
+        'info' => 'Which pipeline stage each automatic move uses.',
+        'route' => 'admin.settings.txn.stage_rules',
+        'sort' => 1,
+        'icon-class' => 'icon-settings-pipeline',
     ],
 
     /**

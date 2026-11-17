@@ -8,44 +8,51 @@ use Webkul\Activity\Models\ActivityProxy;
 use Webkul\Contact\Models\Person;
 
 /**
- * Moves a person's open leads to the TXN stage that matches what just
- * happened (stages: migrations 2026_11_05_000100_add_txn_lead_stages and
- * 2026_11_18_000200_txn_pipeline_v2). Won and lost leads are never moved.
- * Each move is recorded in the lead's history (a "system" activity with the
- * old and new stage and the time).
+ * Moves a person's open leads to the stage that matches what just happened.
+ * Stages are found by their TXN role (StageRoles, set in Settings > TXN
+ * Settings > Stage rules), never by name or code, so admins can rename, add
+ * and remove stages in Krayin's pipeline editor. A move whose role no stage
+ * holds in that pipeline is skipped (the settings screen warns about it).
+ * Won and lost leads are never moved. Each move is recorded in the lead's
+ * history (a "system" activity with the old and new stage and the time).
  *
- * Raw Lead → Needs Review → (roof: Waiting for Roof Report → Roof Report
- * Received) → Contacted → Appointment Scheduled → Canceled → Visit Done →
- * Estimate Sent → Won - Job Sold → Lost. Stage codes are the old ones (only
- * the names changed), e.g. Visit Done is still `prospect`. Visit Done,
- * Estimate Sent and Won are set by staff on the board (Cal.com visits are
- * read-only in Krayin, so nothing ticks them done).
+ * Default stages: Raw Lead → Needs Review → (roof: Waiting for Roof Report →
+ * Roof Report Received) → Contacted → Appointment Scheduled → Canceled →
+ * Visit Done → Estimate Sent → Won - Job Sold → Lost. Visit Done, Estimate
+ * Sent and Won are set by staff on the board (Cal.com visits are read-only).
  */
 final class LeadStageService
 {
-    public const RAW_LEAD = 'new';
+    public const RAW_LEAD = StageRoles::NEW;
 
-    /** The lead check found a problem a person has to look at. */
-    public const NEEDS_REVIEW = 'needs-review';
+    public const NEEDS_REVIEW = StageRoles::NEEDS_REVIEW;
 
-    public const CONTACTED = 'contacted';
+    public const CONTACTED = StageRoles::CONTACTED;
 
-    /** "Appointment Scheduled" (code from when it was "Appointment Set"). */
-    public const APPOINTMENT_SET = 'appointment-set';
+    public const APPOINTMENT_SET = StageRoles::SCHEDULED;
 
-    /** "Canceled". */
-    public const APPOINTMENT_CANCELED = 'appointment-canceled';
+    public const APPOINTMENT_CANCELED = StageRoles::CANCELED;
 
+    public const WAITING_ROOF_REPORT = StageRoles::WAITING_ROOF_REPORT;
+
+    public const ROOF_REPORT_RECEIVED = StageRoles::ROOF_REPORT_RECEIVED;
+
+    /** Krayin's closing stages, by code (not roles). */
     private const CLOSED = ['won', 'lost'];
 
-    /** Roof replacement: waiting for the roof report (set by the lead check). */
-    public const WAITING_ROOF_REPORT = 'waiting-roof-report';
-
-    /** Roof replacement: report in (set by staff); a booking link can follow. */
-    public const ROOF_REPORT_RECEIVED = 'roof-report-received';
+    /** Pseudo-role for Krayin's Lost stage (found by its code). */
+    private const LOST = 'lost';
 
     /** Staff may still send a link by hand to a lead in Needs Review. */
     private const LINK_SENT_FROM = [self::RAW_LEAD, self::NEEDS_REVIEW, self::ROOF_REPORT_RECEIVED, self::APPOINTMENT_CANCELED];
+
+    public function __construct(private StageRoles $roles) {}
+
+    /** The role of the lead's current stage, or null (a stage staff added without a role, Won, Lost ...). */
+    public function roleOf($lead): ?string
+    {
+        return $this->roles->roleOf((int) $lead->lead_pipeline_stage_id);
+    }
 
     /**
      * Booking link emailed: only leads not yet contacted, or whose appointment
@@ -58,7 +65,7 @@ final class LeadStageService
             : $this->move($person, self::CONTACTED, self::LINK_SENT_FROM);
     }
 
-    /** Lead check passed after a problem was fixed: Needs Review → Raw Lead (ready for a booking link). */
+    /** Lead check passed after a problem was fixed: Needs Review → New lead (ready for a booking link). */
     public function readyForLink($lead): bool
     {
         return $this->moveLead($lead, self::RAW_LEAD, [self::NEEDS_REVIEW]);
@@ -75,17 +82,16 @@ final class LeadStageService
     }
 
     /**
-     * Lead check: roof replacement with nothing else wrong. Moves it from Raw
-     * Lead or Needs Review into the Roof Replacement pipeline (the one with
-     * the roof stages; migration 2026_11_08_000100), so only roof leads show
-     * those stages.
+     * Lead check: roof replacement with nothing else wrong. Moves it from New
+     * lead or Needs Review into the roof pipeline (the one whose stage has
+     * the Waiting for roof report role), so only roof leads show those stages.
      */
     public function waitingForRoofReport($lead): bool
     {
         return $this->moveLead($lead, self::WAITING_ROOF_REPORT, [self::RAW_LEAD, self::NEEDS_REVIEW], $this->roofPipelineId());
     }
 
-    /** Lead check: a roof-pipeline lead whose service is no longer roof replacement goes back to the main pipeline's Raw Lead. */
+    /** Lead check: a roof-pipeline lead whose service is no longer roof replacement goes back to the main pipeline's New lead stage. */
     public function backToStandard($lead): bool
     {
         if (! $this->inRoofPipeline($lead)) {
@@ -102,12 +108,9 @@ final class LeadStageService
         return $roofId !== null && (int) $lead->lead_pipeline_id === $roofId;
     }
 
-    /** The pipeline that has the roof stages (found by stage code, so renaming it is fine). */
     private function roofPipelineId(): ?int
     {
-        $id = DB::table('lead_pipeline_stages')->where('code', self::WAITING_ROOF_REPORT)->value('lead_pipeline_id');
-
-        return $id ? (int) $id : null;
+        return $this->roles->pipelineWith(self::WAITING_ROOF_REPORT);
     }
 
     private function defaultPipelineId(): ?int
@@ -123,7 +126,7 @@ final class LeadStageService
      */
     public function lost($lead, string $reason): bool
     {
-        if (! $this->moveLead($lead, 'lost', [self::CONTACTED])) {
+        if (! $this->moveLead($lead, self::LOST, [self::CONTACTED])) {
             return false;
         }
 
@@ -150,49 +153,49 @@ final class LeadStageService
     }
 
     /**
-     * @param  array|null  $fromCodes  only leads now in one of these stages; null = any open stage
+     * @param  array|null  $fromRoles  only leads now in a stage with one of these roles; null = any open stage
      * @return int leads moved
      */
-    private function move(Person $person, string $code, ?array $fromCodes = null): int
+    private function move(Person $person, string $role, ?array $fromRoles = null): int
     {
         $moved = 0;
 
-        foreach ($person->leads()->with('stage', 'pipeline.stages')->get() as $lead) {
-            $moved += $this->moveLead($lead, $code, $fromCodes) ? 1 : 0;
+        foreach ($person->leads()->with('stage')->get() as $lead) {
+            $moved += $this->moveLead($lead, $role, $fromRoles) ? 1 : 0;
         }
 
         return $moved;
     }
 
     /**
-     * @param  int|null  $pipelineId  move into this pipeline's stage with $code; null = the lead's own pipeline
+     * @param  string  $role  the target stage's role (or self::LOST)
+     * @param  int|null  $pipelineId  move into this pipeline's stage with $role; null = the lead's own pipeline
      * @return bool whether the lead moved
      */
-    private function moveLead($lead, string $code, ?array $fromCodes = null, ?int $pipelineId = null): bool
+    private function moveLead($lead, string $role, ?array $fromRoles = null, ?int $pipelineId = null): bool
     {
-        $lead->loadMissing('stage', 'pipeline.stages');
-        $current = $lead->stage?->code;
+        $lead->loadMissing('stage');
 
-        // Same code counts as "already there" only within the same pipeline
-        // (Raw Lead in Roof Replacement → Raw Lead in the main pipeline is a move).
-        $samePipeline = $pipelineId === null || (int) $lead->lead_pipeline_id === $pipelineId;
-
-        if (in_array($current, self::CLOSED, true) || ($current === $code && $samePipeline)) {
+        if (in_array($lead->stage?->code, self::CLOSED, true)) {
             return false;
         }
 
-        if ($fromCodes !== null && ! in_array($current, $fromCodes, true)) {
+        if ($fromRoles !== null && ! in_array($this->roleOf($lead), $fromRoles, true)) {
             return false;
         }
 
-        $target = $pipelineId
-            ? $lead->stage()->getRelated()->newQuery()->where('lead_pipeline_id', $pipelineId)->where('code', $code)->first()
-            : $lead->pipeline?->stages->firstWhere('code', $code);
+        $pipelineId ??= (int) $lead->lead_pipeline_id;
+        $stages = $lead->stage()->getRelated()->newQuery();
+        $targetId = $role === self::LOST
+            ? (clone $stages)->where('lead_pipeline_id', $pipelineId)->where('code', 'lost')->value('id')
+            : $this->roles->stageId($pipelineId, $role);
 
-        if (! $target) {
+        // No stage with that role here (the settings screen warns), or already there.
+        if (! $targetId || (int) $targetId === (int) $lead->lead_pipeline_stage_id) {
             return false;
         }
 
+        $target = (clone $stages)->find($targetId);
         $from = $lead->stage;
 
         Event::dispatch('lead.update.before', $lead->id);

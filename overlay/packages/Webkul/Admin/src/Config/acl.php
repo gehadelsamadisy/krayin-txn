@@ -587,6 +587,22 @@ return [
         'route' => ['admin.settings.tags.delete', 'admin.settings.tags.mass_delete', 'admin.leads.tags.detach'],
         'sort' => 2,
     ], [
+        // TXN Settings (Settings > TXN Settings).
+        'key' => 'settings.txn',
+        'name' => 'TXN Settings',
+        'route' => 'admin.settings.txn.stage_rules',
+        'sort' => 6,
+    ], [
+        'key' => 'settings.txn.stage_rules',
+        'name' => 'Stage rules',
+        'route' => 'admin.settings.txn.stage_rules',
+        'sort' => 1,
+    ], [
+        'key' => 'settings.txn.stage_rules.edit',
+        'name' => 'admin::app.acl.edit',
+        'route' => 'admin.settings.txn.stage_rules.update',
+        'sort' => 1,
+    ], [
         'key' => 'configuration',
         'name' => 'admin::app.acl.configuration',
         'route' => 'admin.configuration.index',

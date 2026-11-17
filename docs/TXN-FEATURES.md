@@ -451,8 +451,20 @@ The stages (migrations `2026_11_05_000100_add_txn_lead_stages`,
 | Won - Job Sold | `won` | staff |
 | Lost | `lost` | follow-ups ran out (`txn:follow-ups`), or staff |
 
-Codes are the old ones (v2 only renamed stages), so a stage can be renamed in
-Settings without breaking anything. v2 removed Pre-Qualified and Krayin's
+**Stage rules (roles).** Since migration `2026_11_19_000100_create_txn_stage_roles`
+the automation finds its stages by **role**, not by name or code
+(`Support\Contact\StageRoles`, table `txn_stage_roles`). Roles: New lead, Needs
+review, Waiting for roof report, Roof report received, Contacted, Appointment
+scheduled, Canceled; Won and Lost stay Krayin's closing stages (by code). Admins
+add, remove, rename and reorder stages in Settings > Pipelines and give roles in
+**Settings > TXN Settings > Stage rules** (one stage per role per pipeline;
+Waiting for roof report marks the roof pipeline). A stage without a role is
+never touched by the automation. A role no stage holds makes that move skip,
+and the screen warns about it (also about stages sharing a position, which
+hides a board column). Every change is logged in `txn_settings_log`.
+Permissions: `settings.txn.stage_rules` (view) and `.edit` (save).
+
+Codes are the old ones (v2 only renamed stages). v2 removed Pre-Qualified and Krayin's
 Follow Up (their leads → Raw Lead) and Appointment Rescheduled / Appointment
 Confirmed (→ Appointment Scheduled), and moved open leads with the "Needs
 review" tag to Needs Review. Every stage and every moved lead was saved first

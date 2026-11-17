@@ -84,9 +84,10 @@ Artisan::command('txn:triage-leads {--lead=* : only these lead ids} {--new : onl
     }
 
     if ($this->option('new')) {
-        $query->whereHas('stage', fn ($stage) => $stage->whereIn('code', [
-            Webkul\Admin\Support\Contact\LeadStageService::RAW_LEAD,
-            Webkul\Admin\Support\Contact\LeadStageService::NEEDS_REVIEW,
+        // By stage role (Stage rules), like the "Check new leads" button.
+        $query->whereIn('lead_pipeline_stage_id', app(Webkul\Admin\Support\Contact\StageRoles::class)->stageIds([
+            Webkul\Admin\Support\Contact\StageRoles::NEW,
+            Webkul\Admin\Support\Contact\StageRoles::NEEDS_REVIEW,
         ]));
     }
 

@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Webkul\Admin\Support\Contact\LeadStageService;
 use Webkul\Admin\Support\Contact\LeadTriageService;
+use Webkul\Admin\Support\Contact\StageRoles;
 use Webkul\Contact\Repositories\PersonRepository;
 use Webkul\Lead\Models\Lead;
 use Webkul\Lead\Repositories\LeadRepository;
@@ -45,6 +46,23 @@ Http::fake([
     '*' => Http::response([], 500),
 ]);
 
+// The admin forms post a CSRF token; these checks call the routes directly.
+$pass = new class { public function handle($request, $next) { return $next($request); } };
+foreach ([
+    Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
+    Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
+    App\Http\Middleware\VerifyCsrfToken::class,
+] as $class) {
+    $app->instance($class, $pass);
+}
+
+$call = function (string $method, string $uri, array $params = []) use ($kernel) {
+    $request = Request::create($uri, $method, $params);
+    app()->instance('request', $request);
+
+    return $kernel->handle($request);
+};
+
 $results = [];
 $section = '';
 $check = function (string $name, bool $ok, string $detail = '') use (&$results, &$section) {
@@ -69,6 +87,7 @@ try {
 
     $triage = app(LeadTriageService::class);
     $stages = app(LeadStageService::class);
+    $rolesSvc = app(StageRoles::class);
     $leads = app(LeadRepository::class);
     $settings = config('lead_triage.import');
     $tagName = config('lead_triage.review_tag.name');
@@ -233,6 +252,69 @@ try {
     $check('Link sent to a Visit Done lead -> not moved', $stages->linkSent($visited->person, $fresh($visited)) === 0 && $at($visited) === [$defaultId, 'prospect'], $where($visited));
     $check('Follow-ups never mark a lead Lost unless it is in Contacted', ! $stages->lost($fresh($visited), 'x') && $at($visited) === [$defaultId, 'prospect'], $where($visited));
     $check('Lead check leaves a Visit Done lead where it is', ($triage->check($fresh($visited))['moved'] ?? true) === false && $at($visited) === [$defaultId, 'prospect'], $where($visited));
+
+    // =====================================================================
+    $section = 'Stage roles (automation follows roles, not stage names or codes)';
+    // =====================================================================
+    $roleCount = fn (int $pipelineId, string $role) => DB::table('txn_stage_roles as r')
+        ->join('lead_pipeline_stages as s', 's.id', '=', 'r.lead_pipeline_stage_id')
+        ->where('s.lead_pipeline_id', $pipelineId)->where('r.role', $role)->count();
+    $base = [StageRoles::NEW, StageRoles::NEEDS_REVIEW, StageRoles::CONTACTED, StageRoles::SCHEDULED, StageRoles::CANCELED];
+    $check('Main pipeline: each automation role is on exactly one stage', collect($base)->every(fn ($role) => $roleCount($defaultId, $role) === 1));
+    $check('Roof pipeline: those roles plus the two roof roles, once each', collect([...$base, StageRoles::WAITING_ROOF_REPORT, StageRoles::ROOF_REPORT_RECEIVED])->every(fn ($role) => $roleCount($roofId, $role) === 1));
+
+    // What Krayin's pipeline editor may do on a rename: new name and new code.
+    $contactedId = $stageId($defaultId, 'contacted');
+    DB::table('lead_pipeline_stages')->where('id', $contactedId)->update(['code' => 'called-customer', 'name' => 'Called customer']);
+    $p1 = $makePerson();
+    $l1 = $makeLead('Gutter repair', $p1);
+    $check('Renamed and re-coded Contacted stage still receives "link sent"', $stages->linkSent($p1, $fresh($l1)) === 1 && $at($l1) === [$defaultId, 'called-customer'], $where($l1));
+
+    DB::table('txn_stage_roles')->where('lead_pipeline_stage_id', $contactedId)->delete();
+    $p2 = $makePerson();
+    $l2 = $makeLead('Gutter repair', $p2);
+    $check('No stage with the Contacted role -> "link sent" moves nothing', $stages->linkSent($p2, $fresh($l2)) === 0 && $at($l2) === [$defaultId, 'new'], $where($l2));
+
+    $customId = DB::table('lead_pipeline_stages')->insertGetId(['code' => 'called-once', 'name' => 'Called once', 'probability' => 100, 'sort_order' => 98, 'lead_pipeline_id' => $defaultId]);
+    DB::table('txn_stage_roles')->insert(['lead_pipeline_stage_id' => $customId, 'role' => StageRoles::CONTACTED, 'created_at' => now(), 'updated_at' => now()]);
+    $check('A new stage given the Contacted role takes over "link sent"', $stages->linkSent($p2, $fresh($l2)) === 1 && $at($l2) === [$defaultId, 'called-once'], $where($l2));
+
+    $plainId = DB::table('lead_pipeline_stages')->insertGetId(['code' => 'waiting-on-hoa', 'name' => 'Waiting on HOA', 'probability' => 100, 'sort_order' => 99, 'lead_pipeline_id' => $defaultId]);
+    $hoa = $makeLead('Pool cleaning', $makePerson(), 'waiting-on-hoa');
+    $result = $triage->check($fresh($hoa));
+    $check('A stage without a role is left alone by the lead check', ! $result['moved'] && $at($hoa) === [$defaultId, 'waiting-on-hoa'], $where($hoa));
+    $check('... and by booking-link and follow-up moves', $stages->linkSent($hoa->person, $fresh($hoa)) === 0 && ! $stages->lost($fresh($hoa), 'x'), $where($hoa));
+
+    // =====================================================================
+    $section = 'Stage rules screen (Settings > TXN Settings)';
+    // =====================================================================
+    $url = route('admin.settings.txn.stage_rules', [], false);
+    $page = $call('GET', $url);
+    $html = (string) $page->getContent();
+    $check('Screen opens and lists the stages', $page->getStatusCode() === 200 && str_contains($html, 'Stage rules') && str_contains($html, 'Called once'), 'HTTP '.$page->getStatusCode());
+    $check('Every role is held ("Called once" has Contacted) -> no missing-role warning', ! str_contains($html, 'no stage has the role'));
+
+    $logBefore = DB::table('txn_settings_log')->count();
+    $call('PUT', $url, ['roles' => [$customId => StageRoles::CONTACTED, $contactedId => StageRoles::CONTACTED]]);
+    $check('Same role on two stages of one pipeline -> refused, nothing saved', $rolesSvc->roleOf($contactedId) === null && $rolesSvc->roleOf($customId) === StageRoles::CONTACTED && DB::table('txn_settings_log')->count() === $logBefore);
+
+    $wonId = $stageId($defaultId, 'won');
+    $call('PUT', $url, ['roles' => [$wonId => StageRoles::NEW]]);
+    $check('A role on Won (Krayin closing stage) -> refused', $rolesSvc->roleOf($wonId) === null);
+
+    $call('PUT', $url, ['roles' => [$customId => StageRoles::WAITING_ROOF_REPORT]]);
+    $check('Waiting for roof report in a second pipeline -> refused', $rolesSvc->roleOf($customId) === StageRoles::CONTACTED);
+
+    $call('PUT', $url, ['roles' => [$customId => '', $contactedId => StageRoles::CONTACTED]]);
+    $logged = DB::table('txn_settings_log')->where('area', 'stage_roles')->orderByDesc('id')->limit(2)->get();
+    $check('Valid change -> saved', $rolesSvc->roleOf($contactedId) === StageRoles::CONTACTED && $rolesSvc->roleOf($customId) === null);
+    $check('... and both changes logged with who and old -> new', DB::table('txn_settings_log')->count() === $logBefore + 2
+        && $logged->every(fn ($row) => (int) $row->user_id === (int) $adminId)
+        && $logged->contains(fn ($row) => $row->old_value === 'Contacted' && $row->new_value === 'None'), $logged->toJson());
+
+    DB::table('lead_pipeline_stages')->whereIn('id', [$customId, $plainId])->update(['sort_order' => 1]);
+    $html = (string) $call('GET', $url)->getContent();
+    $check('Two stages on the same position -> the screen warns (hidden board column)', str_contains($html, 'share position 1'));
 
     $check('No call left this machine except the faked map lookups', Http::recorded()->every(fn ($pair) => str_contains($pair[0]->url(), 'geocod.io')), Http::recorded()->count().' requests');
 } catch (Throwable $exception) {

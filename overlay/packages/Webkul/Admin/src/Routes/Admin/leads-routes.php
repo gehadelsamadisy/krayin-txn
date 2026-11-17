@@ -7,6 +7,7 @@ use Webkul\Admin\Http\Controllers\Lead\LeadController;
 use Webkul\Admin\Http\Controllers\Lead\LeadTriageController;
 use Webkul\Admin\Http\Controllers\Lead\QuoteController;
 use Webkul\Admin\Http\Controllers\Lead\TagController;
+use Webkul\Admin\Http\Controllers\Settings\TxnStageRulesController;
 
 // Lead check (LeadTriageService), CSV import (LeadCsvImportService) and
 // import from the lead database (LeadDbImportService).
@@ -18,6 +19,13 @@ Route::controller(LeadTriageController::class)->prefix('leads')->group(function 
     Route::post('import-db', 'importDb')->name('admin.leads.import_db');
 
     Route::post('{id}/check', 'check')->name('admin.leads.triage');
+});
+
+// Settings > TXN Settings > Stage rules: which stage each automatic move uses.
+Route::controller(TxnStageRulesController::class)->prefix('settings/txn/stage-rules')->group(function () {
+    Route::get('', 'index')->name('admin.settings.txn.stage_rules');
+
+    Route::put('', 'update')->name('admin.settings.txn.stage_rules.update');
 });
 
 Route::controller(LeadController::class)->prefix('leads')->group(function () {

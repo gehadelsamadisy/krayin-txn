@@ -10,7 +10,7 @@
 #    Geocodio switched off;
 # 3. shows the leads per stage, runs the pending migrations, shows them again;
 # 4. runs tests/pipeline-check.php (rolled back, nothing kept);
-# 5. undoes the 2 pipeline migrations and checks every lead is back in exactly
+# 5. undoes the migrations it ran and checks every lead is back in exactly
 #    the stage it started in, and the stages are as before;
 # 6. removes the test container and the scratch database.
 source "$(dirname "$0")/lib.sh"
@@ -75,9 +75,10 @@ wait_healthy "$C" 300 || { docker logs --tail 40 "$C"; die "The test container d
 artisan() { docker exec -u www-data "$C" php artisan "$@"; }
 
 log "Pending migrations"
-artisan migrate:status --pending || true
+PENDING=$(artisan migrate:status | grep -c 'Pending' || true)
+artisan migrate:status | grep 'Pending' || echo "  none"
 
-log "Running the migrations on the copy"
+log "Running the $PENDING pending migration(s) on the copy"
 artisan migrate --force
 
 log "AFTER: leads per stage"
@@ -92,8 +93,10 @@ docker exec "$C" mkdir -p /var/www/laravel-crm/tests
 docker cp tests/pipeline-check.php "$C:/var/www/laravel-crm/tests/pipeline-check.php"
 docker exec -u www-data -e HOME=/tmp "$C" php tests/pipeline-check.php || ok=0
 
-log "Undoing the 2 pipeline migrations"
-artisan migrate:rollback --step=2 --force
+if [ "$PENDING" -gt 0 ]; then
+    log "Undoing the $PENDING migration(s) this test ran"
+    artisan migrate:rollback --step="$PENDING" --force
+fi
 
 log "AFTER UNDO: leads per stage"
 stage_table

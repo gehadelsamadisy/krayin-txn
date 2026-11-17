@@ -23,7 +23,7 @@ use Webkul\Lead\Repositories\PipelineRepository;
  * - The whole file is checked first; one bad row and nothing is saved.
  * - A lead is found by its "[TXN-ANGI-…]" / "[TXN-YELP-…]" title tag, so
  *   importing the same file again never duplicates leads.
- * - New lead: Raw Lead in the default pipeline. Its contact is the one with
+ * - New lead: the default pipeline's "New lead" stage (Raw Lead; Stage rules). Its contact is the one with
  *   the same phone number if there is one, otherwise a new contact.
  * - Existing lead: the source facts (record id, source, received at, …) are
  *   refreshed; the service name and the contact's name, phone and address are
@@ -355,7 +355,9 @@ class LeadCsvImportService
         }
 
         $pipeline = $this->pipelines->getDefaultPipeline();
-        $stage = $pipeline->stages()->where('code', 'new')->first() ?? $pipeline->stages()->first();
+        // The stage with the "New lead" role (Stage rules), else the pipeline's first stage.
+        $newStageId = app(StageRoles::class)->stageId((int) $pipeline->id, StageRoles::NEW);
+        $stage = ($newStageId ? $pipeline->stages()->whereKey($newStageId)->first() : null) ?? $pipeline->stages()->first();
         $settings = config('lead_triage.import');
 
         $prefix = implode(' - ', array_filter([$row['service_name'], $row['name']]));

@@ -11,6 +11,7 @@ use Webkul\Admin\Support\Contact\LeadCsvImportService;
 use Webkul\Admin\Support\Contact\LeadDbImportService;
 use Webkul\Admin\Support\Contact\LeadStageService;
 use Webkul\Admin\Support\Contact\LeadTriageService;
+use Webkul\Admin\Support\Contact\StageRoles;
 use Webkul\Lead\Models\Lead;
 
 /**
@@ -39,7 +40,7 @@ class LeadTriageController extends Controller
     public function checkNew(LeadTriageService $triage): RedirectResponse
     {
         $leads = Lead::query()
-            ->whereHas('stage', fn ($query) => $query->whereIn('code', [LeadStageService::RAW_LEAD, LeadStageService::NEEDS_REVIEW]))
+            ->whereIn('lead_pipeline_stage_id', app(StageRoles::class)->stageIds([LeadStageService::RAW_LEAD, LeadStageService::NEEDS_REVIEW]))
             ->orderBy('id')->get();
         $deadline = microtime(true) + config('lead_triage.import.check_seconds', 200);
         $ready = $review = $left = 0;

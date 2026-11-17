@@ -222,13 +222,14 @@ final class FollowUpService
             return collect();
         }
 
-        $query = Lead::query()->with('stage', 'pipeline.stages')->where('person_id', $person->id);
+        $query = Lead::query()->with('stage')->where('person_id', $person->id);
 
         if ($row->lead_id) {
             $query->whereKey($row->lead_id);
         }
 
-        return $query->get()->filter(fn ($lead) => $lead->stage?->code === LeadStageService::CONTACTED)->values();
+        // By stage role, so a renamed or replaced Contacted stage still counts.
+        return $query->get()->filter(fn ($lead) => $this->stages->roleOf($lead) === LeadStageService::CONTACTED)->values();
     }
 
     /** true = a live booking exists for the link's event, false = none, null = couldn't check. */

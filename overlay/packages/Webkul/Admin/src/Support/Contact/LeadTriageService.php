@@ -23,7 +23,7 @@ use Webkul\Tag\Models\TagProxy;
  */
 final class LeadTriageService
 {
-    /** Stages where the check decides what happens next. */
+    /** Stage roles (StageRoles) where the check decides what happens next. */
     private const OPEN_STAGES = [
         LeadStageService::RAW_LEAD,
         LeadStageService::NEEDS_REVIEW,
@@ -119,12 +119,12 @@ final class LeadTriageService
             $person && ! $hasEmail ? 'No email address to send the booking link to' : null,
         ]));
 
-        $stageCode = $lead->stage?->code;
-        $open = in_array($stageCode, self::OPEN_STAGES, true);
+        $stageRole = $this->stages->roleOf($lead);
+        $open = in_array($stageRole, self::OPEN_STAGES, true);
         $asks = array_values(array_intersect($missing, ['Street address', 'Phone']));
         // Roof replacement: no booking link until the roof report is in
         // (staff set "Roof Report Received").
-        $needsRoofReport = $flow === 'roof_report' && $stageCode !== LeadStageService::ROOF_REPORT_RECEIVED;
+        $needsRoofReport = $flow === 'roof_report' && $stageRole !== LeadStageService::ROOF_REPORT_RECEIVED;
 
         if (! $open) {
             $review = false;
