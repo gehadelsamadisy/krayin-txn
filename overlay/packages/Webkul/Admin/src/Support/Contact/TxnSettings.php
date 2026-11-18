@@ -555,7 +555,8 @@ final class TxnSettings
             case 'emails':
             case 'phones':
             case 'ids':
-                $items = is_array($value) ? $value : preg_split('/[\s,;]+/', (string) $value, -1, PREG_SPLIT_NO_EMPTY);
+                // One entry per line (or comma/semicolon); spaces stay inside an entry ("+1 713 555 0102").
+                $items = is_array($value) ? $value : preg_split('/[\r\n,;]+/', (string) $value, -1, PREG_SPLIT_NO_EMPTY);
                 $items = array_values(array_unique(array_filter(array_map(fn ($item) => trim((string) $item), $items), fn ($item) => $item !== '')));
                 // No format check (the user's choice): an entry that isn't a real
                 // address, number or ID simply never matches anyone.

@@ -221,6 +221,8 @@ class TxnSettingsController extends Controller
     private function connections(Request $request): array
     {
         $values = [];
+        // The mailer in use; a test mailer (array/log) set at run time stands for the .env one.
+        $current = in_array(config('mail.default'), ['array', 'log'], true) ? TxnSettings::default('mail.default') : config('mail.default');
 
         foreach (TxnSettings::keys('connections') as $key) {
             $typed = (string) $request->input($this->inputName($key), '');
@@ -230,8 +232,11 @@ class TxnSettingsController extends Controller
             }
 
             // An untouched field is not checked or saved again, so a placeholder
-            // left in .env (e.g. CHANGE_ME) never blocks saving the other fields.
-            if (! TxnSettings::isSecret($key) && trim($typed) === trim((string) config($key))) {
+            // left in .env (e.g. CHANGE_ME, or MAIL_MAILER=log) never blocks
+            // saving the other fields.
+            $now = $key === 'mail.default' ? $current : config($key);
+
+            if (! TxnSettings::isSecret($key) && trim($typed) === trim((string) $now)) {
                 continue;
             }
 
@@ -239,9 +244,7 @@ class TxnSettingsController extends Controller
         }
 
         // Only when the mailer is being changed: the new one must have its login.
-        $current = in_array(config('mail.default'), ['array', 'log'], true) ? TxnSettings::default('mail.default') : config('mail.default');
-
-        if (($values['mail.default'] ?? '') === $current) {
+        if (! isset($values['mail.default'])) {
             return [$values, []];
         }
 
