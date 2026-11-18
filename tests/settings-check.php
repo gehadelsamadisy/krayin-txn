@@ -319,6 +319,9 @@ try {
     $rawToken = fn () => (string) DB::table('txn_settings')->where('key', 'sms.auth_token')->value('value');
     $envToken = TxnSettings::default('sms.auth_token');
 
+    // Like the server's .env: placeholders left in fields nobody touches.
+    config(['sms.from_number' => 'CHANGE_ME', 'graph_mail.tenant_id' => 'CHANGE_ME']);
+
     $page = $call('GET', route('admin.settings.txn.connections', [], false));
     $check('Connections opens, locked ("Edit keys")', $page->getStatusCode() === 200 && str_contains((string) $page->getContent(), 'Edit keys'));
 
@@ -326,7 +329,8 @@ try {
     $check('Save without unlocking -> refused, nothing saved', ! TxnSettings::isSaved('sms.auth_token'));
 
     $call('PUT', $connUrl, $connForm([$name('sms.auth_token') => $token, $name('sms.account_sid') => $sid, $name('sms.messaging_service_sid') => $service]));
-    $check('Unlocked save: token used at once', config('sms.auth_token') === $token && config('sms.account_sid') === $sid);
+    $check('Unlocked save: token used at once (CHANGE_ME left in untouched fields doesn\'t block it)', config('sms.auth_token') === $token && config('sms.account_sid') === $sid);
+    $check('... the untouched placeholders are not saved', ! TxnSettings::isSaved('sms.from_number') && ! TxnSettings::isSaved('graph_mail.tenant_id'));
     $check('... stored encrypted (not the plain token)', $rawToken() !== '' && ! str_contains($rawToken(), $token));
     $logged = DB::table('txn_settings_log')->where('area', 'settings:connections')->where('item', 'Twilio Auth token')->orderByDesc('id')->first();
     $check('... logged as "ends …" only', $logged && str_contains($logged->new_value, 'ends …'.substr($token, -4)) && ! str_contains($logged->new_value.$logged->old_value, $token), json_encode($logged));
@@ -439,8 +443,9 @@ try {
 
     $call('PUT', $safetyUrl, $safetyForm([$name('sms.allowed_recipients') => "+17135550101\n+1 713 555 0102"]));
     $check('Allowed test phones saved as a list', config('sms.allowed_recipients') === ['+17135550101', '+1 713 555 0102'], json_encode(config('sms.allowed_recipients')));
-    $call('PUT', $safetyUrl, $safetyForm([$name('mail_guard.allowed_recipients') => "tester@txn-check.example\nnot-an-email"]));
-    $check('A bad address in the test list -> refused', config('mail_guard.allowed_recipients') !== ['tester@txn-check.example', 'not-an-email']);
+    $call('PUT', $safetyUrl, $safetyForm([$name('mail_guard.allowed_recipients') => "Tester@txn-check.example\nCHANGE_ME"]));
+    $check('Test lists are saved as typed, no format check (lowercased emails)', config('mail_guard.allowed_recipients') === ['tester@txn-check.example', 'change_me'], json_encode(config('mail_guard.allowed_recipients')));
+    $check('... and the email guard still stops a customer address', $sentTo('customer@txn-check.example') === 0);
 
     // A saved guard that can't be read counts as on.
     config(['txn.guard_sms' => false]);

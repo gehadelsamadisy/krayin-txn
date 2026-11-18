@@ -229,6 +229,12 @@ class TxnSettingsController extends Controller
                 continue;
             }
 
+            // An untouched field is not checked or saved again, so a placeholder
+            // left in .env (e.g. CHANGE_ME) never blocks saving the other fields.
+            if (! TxnSettings::isSecret($key) && trim($typed) === trim((string) config($key))) {
+                continue;
+            }
+
             $values[$key] = $typed;
         }
 

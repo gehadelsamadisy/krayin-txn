@@ -557,18 +557,13 @@ final class TxnSettings
             case 'ids':
                 $items = is_array($value) ? $value : preg_split('/[\s,;]+/', (string) $value, -1, PREG_SPLIT_NO_EMPTY);
                 $items = array_values(array_unique(array_filter(array_map(fn ($item) => trim((string) $item), $items), fn ($item) => $item !== '')));
-                $clean = [];
-
-                foreach ($items as $item) {
-                    if ($type === 'emails') {
-                        $item = mb_strtolower($item);
-                        filter_var($item, FILTER_VALIDATE_EMAIL) ? $clean[] = $item : $errors[] = "{$label}: \"{$item}\" is not an email address.";
-                    } elseif ($type === 'phones') {
-                        ContactDataNormalizer::phone($item) ? $clean[] = $item : $errors[] = "{$label}: \"{$item}\" is not a phone number in international format (+1...).";
-                    } else {
-                        ctype_digit($item) && (int) $item > 0 ? $clean[] = (int) $item : $errors[] = "{$label}: \"{$item}\" is not a contact ID.";
-                    }
-                }
+                // No format check (the user's choice): an entry that isn't a real
+                // address, number or ID simply never matches anyone.
+                $clean = array_map(fn ($item) => match ($type) {
+                    'emails' => mb_strtolower($item),
+                    'ids' => ctype_digit($item) ? (int) $item : $item,
+                    default => $item,
+                }, $items);
 
                 if (count($clean) > ($options['max_items'] ?? 50)) {
                     $errors[] = "{$label}: at most {$options['max_items']} entries.";
