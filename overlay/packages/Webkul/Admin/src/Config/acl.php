@@ -663,6 +663,16 @@ return [
         'route' => 'admin.settings.txn.connections.update',
         'sort' => 1,
     ], [
+        'key' => 'settings.txn.safety',
+        'name' => 'Safety',
+        'route' => 'admin.settings.txn.safety',
+        'sort' => 8,
+    ], [
+        'key' => 'settings.txn.safety.edit',
+        'name' => 'admin::app.acl.edit',
+        'route' => 'admin.settings.txn.safety.update',
+        'sort' => 1,
+    ], [
         'key' => 'configuration',
         'name' => 'admin::app.acl.configuration',
         'route' => 'admin.configuration.index',

@@ -354,7 +354,7 @@ class PersonController extends Controller
             'slot_workers.*.required' => 'Choose a worker for each time.',
         ]);
 
-        if (config('txn.test_mode', true)) {
+        if (config('txn.guard_calcom', true)) {
             if (!in_array(strtolower($validated['email']), $testRecipients, true)) {
                 return back()->withErrors(['email' => 'This address is not an allowed test recipient.']);
             }
@@ -494,7 +494,7 @@ class PersonController extends Controller
     /** In test mode, only one booking-link email may ever be sent (CALCOM_SINGLE_TEST_ATTEMPT). */
     private function singleTestAttempt(): bool
     {
-        return config('txn.test_mode', true) && config('calcom.single_test_attempt', true);
+        return config('txn.guard_calcom', true) && config('calcom.single_test_attempt', true);
     }
 
     /**
@@ -503,7 +503,7 @@ class PersonController extends Controller
      */
     private function customerLinkAllowed(Person $person): bool
     {
-        if (!config('txn.test_mode', true)) {
+        if (!config('txn.guard_calcom', true)) {
             return $this->personEmails($person) !== [];
         }
 

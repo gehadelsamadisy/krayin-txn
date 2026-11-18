@@ -35,7 +35,19 @@ final class TxnSettings
         'follow-ups' => ['Follow-ups', 'When reminders go out and when an unanswered lead is marked Lost.'],
         'emails' => ['Emails', 'The booking-link, reminder and final emails, part by part.'],
         'connections' => ['Connections', 'API keys, tokens and logins for Cal.com, Twilio, email sending, Geocodio and the lead database.'],
+        'safety' => ['Safety', 'Whether emails, texts and booking links can reach customers, or only the test addresses.'],
     ];
+
+    /** Guards on the Safety screen: turning one off needs this typed confirmation. */
+    public const GUARDS = ['txn.guard_email' => 'Email guard', 'txn.guard_sms' => 'SMS guard', 'txn.guard_calcom' => 'Cal.com guard'];
+
+    public const GUARD_OFF_CONFIRMATION = 'SEND TO CUSTOMERS';
+
+    /** Whether any guard is off (customers can be contacted), for the banner. */
+    public static function guardsOff(): array
+    {
+        return array_values(array_filter(self::GUARDS, fn ($label, $key) => ! config($key, true), ARRAY_FILTER_USE_BOTH));
+    }
 
     /**
      * Connections screen: one card per service, with its keys and its Test.
@@ -202,6 +214,17 @@ final class TxnSettings
             'lead_triage.lead_db.username' => ['connections', 'text', 'Lead database login', ['max' => 64]],
             'lead_triage.lead_db.password' => ['connections', 'secret', 'Lead database password', []],
             'lead_triage.webhook_token' => ['connections', 'secret', 'Webhook token (shared with TXNHome)', ['min' => 16]],
+
+            'txn.guard_email' => ['safety', 'guard', 'Email guard', []],
+            'mail_guard.allowed_recipients' => ['safety', 'emails', 'Allowed test emails', ['max_items' => 50]],
+            'lead_triage.import.store_real_emails' => ['safety', 'bool', 'Store real customer emails on import', []],
+            'txn.guard_sms' => ['safety', 'guard', 'SMS guard', []],
+            'sms.allowed_recipients' => ['safety', 'phones', 'Allowed test phones', ['max_items' => 50]],
+            'txn.guard_calcom' => ['safety', 'guard', 'Cal.com guard', []],
+            'calcom.allow_customer_email' => ['safety', 'bool', 'Allow booking links for the test contacts', []],
+            'calcom.test_person_ids' => ['safety', 'ids', 'Test contacts (contact IDs)', ['max_items' => 50]],
+            'calcom.test_recipient_emails' => ['safety', 'emails', 'Test recipient emails', ['max_items' => 50]],
+            'calcom.single_test_attempt' => ['safety', 'bool', 'Only one booking-link email per test', []],
         ];
 
         foreach (self::EMAIL_PARTS as $group => [$title, $parts]) {
@@ -273,6 +296,10 @@ final class TxnSettings
 
                 if (! $errors) {
                     config([$key => $clean]);
+                    self::$appliedKeys[$key] = true;
+                } elseif ($fields[$key][1] === 'guard') {
+                    // A saved guard that can't be read counts as ON (fail safe).
+                    config([$key => true]);
                     self::$appliedKeys[$key] = true;
                 }
             }
@@ -411,6 +438,7 @@ final class TxnSettings
         DB::transaction(function () use ($clean, $fields, $screen, $userId, &$changes) {
             foreach ($clean as $key => $value) {
                 $secret = $fields[$key][1] === 'secret';
+                $guard = $fields[$key][1] === 'guard';
                 // A test mailer (array/log) set at run time stays in place; the row is still saved.
                 $keepTestMailer = $key === 'mail.default' && in_array(config('mail.default'), ['array', 'log'], true);
                 $old = $keepTestMailer ? self::default($key) : config($key);
@@ -440,8 +468,8 @@ final class TxnSettings
                     'user_id' => $userId,
                     'area' => "settings:{$screen}",
                     'item' => $fields[$key][2],
-                    'old_value' => $secret ? self::mask($old) : self::describe($old),
-                    'new_value' => ($secret ? self::mask($new) : self::describe($new)).($value === null ? ' (default)' : ''),
+                    'old_value' => $secret ? self::mask($old) : ($guard ? ($old ? 'on' : 'off') : self::describe($old)),
+                    'new_value' => ($secret ? self::mask($new) : ($guard ? ($new ? 'on' : 'off') : self::describe($new))).($value === null ? ' (default)' : ''),
                     'created_at' => now(),
                 ]);
 
@@ -509,6 +537,44 @@ final class TxnSettings
                 } elseif (mb_strlen($value) < ($options['min'] ?? 1)) {
                     $errors[] = "{$label}: at least {$options['min']} characters.";
                 }
+                break;
+
+            case 'guard':
+            case 'bool':
+                $parsed = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+
+                if (! is_bool($value) && ($parsed === null || $value === '' || $value === null)) {
+                    $errors[] = "{$label}: must be on or off.";
+                    $value = $type === 'guard'; // a guard that can't be read is on
+                    break;
+                }
+
+                $value = is_bool($value) ? $value : $parsed;
+                break;
+
+            case 'emails':
+            case 'phones':
+            case 'ids':
+                $items = is_array($value) ? $value : preg_split('/[\s,;]+/', (string) $value, -1, PREG_SPLIT_NO_EMPTY);
+                $items = array_values(array_unique(array_filter(array_map(fn ($item) => trim((string) $item), $items), fn ($item) => $item !== '')));
+                $clean = [];
+
+                foreach ($items as $item) {
+                    if ($type === 'emails') {
+                        $item = mb_strtolower($item);
+                        filter_var($item, FILTER_VALIDATE_EMAIL) ? $clean[] = $item : $errors[] = "{$label}: \"{$item}\" is not an email address.";
+                    } elseif ($type === 'phones') {
+                        ContactDataNormalizer::phone($item) ? $clean[] = $item : $errors[] = "{$label}: \"{$item}\" is not a phone number in international format (+1...).";
+                    } else {
+                        ctype_digit($item) && (int) $item > 0 ? $clean[] = (int) $item : $errors[] = "{$label}: \"{$item}\" is not a contact ID.";
+                    }
+                }
+
+                if (count($clean) > ($options['max_items'] ?? 50)) {
+                    $errors[] = "{$label}: at most {$options['max_items']} entries.";
+                }
+
+                $value = array_values(array_unique($clean));
                 break;
 
             case 'choice':

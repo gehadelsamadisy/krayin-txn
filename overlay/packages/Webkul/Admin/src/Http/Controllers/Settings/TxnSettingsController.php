@@ -51,44 +51,91 @@ class TxnSettingsController extends Controller
         ] + match ($screen) {
             'emails' => $this->emailExtras(),
             'connections' => $this->connectionExtras($keys),
+            'safety' => $this->safetyExtras($keys),
             default => [],
         });
     }
+
+    /** Screens that open locked and save only after "Edit" is confirmed (unlocked=1). */
+    private const LOCKED_SCREENS = ['connections', 'safety'];
 
     public function update(Request $request, string $screen): RedirectResponse
     {
         abort_unless(isset(TxnSettings::SCREENS[$screen]), 404);
 
-        if ($screen === 'connections') {
-            return $this->updateConnections($request);
+        if (in_array($screen, self::LOCKED_SCREENS, true)) {
+            return $this->updateLocked($request, $screen);
         }
 
         return $this->saveScreen($request, $screen);
     }
 
     /**
-     * Connections: saved only when the screen was unlocked ("Edit keys",
-     * confirmed) and the user may edit it. Typed secrets are never kept in
+     * Connections and Safety: saved only when the screen was unlocked
+     * (confirmed) and the user may edit it. Typed secrets are never kept in
      * the session when the save fails.
      */
-    private function updateConnections(Request $request): RedirectResponse
+    private function updateLocked(Request $request, string $screen): RedirectResponse
     {
-        abort_unless(bouncer()->hasPermission('settings.txn.connections.edit'), 403);
+        abort_unless(bouncer()->hasPermission("settings.txn.{$screen}.edit"), 403);
+
+        $route = "admin.settings.txn.{$screen}";
 
         if ($request->input('unlocked') !== '1') {
-            return redirect()->route('admin.settings.txn.connections')
-                ->withErrors(['settings' => ['Click "Edit keys" and confirm before changing anything.']]);
+            return redirect()->route($route)
+                ->withErrors(['settings' => ['Unlock the page and confirm before changing anything.']]);
         }
 
         try {
-            return $this->saveScreen($request, 'connections');
+            return $this->saveScreen($request, $screen);
         } catch (ValidationException $exception) {
-            $secretInputs = array_map([$this, 'inputName'], array_filter(TxnSettings::keys('connections'), [TxnSettings::class, 'isSecret']));
+            $secretInputs = array_map([$this, 'inputName'], array_filter(TxnSettings::keys($screen), [TxnSettings::class, 'isSecret']));
 
-            return redirect()->route('admin.settings.txn.connections')
+            return redirect()->route($route)
                 ->withErrors($exception->errors())
-                ->withInput($request->except(array_merge($secretInputs, ['_token', '_method', 'unlocked'])));
+                ->withInput($request->except(array_merge($secretInputs, ['_token', '_method', 'unlocked', 'confirm_off'])));
         }
+    }
+
+    /**
+     * Safety: guards, test lists and import option. Turning a guard OFF (so
+     * customers are contacted) needs the typed confirmation; turning one on
+     * never does.
+     */
+    private function safety(Request $request): array
+    {
+        $values = [];
+        $turningOff = [];
+
+        foreach (TxnSettings::keys('safety') as $key) {
+            $type = TxnSettings::fields()[$key][1];
+            $typed = $request->input($this->inputName($key));
+
+            $values[$key] = in_array($type, ['guard', 'bool'], true) ? ((string) $typed === '1') : (string) $typed;
+
+            if ($type === 'guard' && $values[$key] === false && config($key, true)) {
+                $turningOff[] = TxnSettings::GUARDS[$key];
+            }
+        }
+
+        $errors = $turningOff && trim((string) $request->input('confirm_off')) !== TxnSettings::GUARD_OFF_CONFIRMATION
+            ? ['To turn off the '.implode(' and ', $turningOff).', type '.TxnSettings::GUARD_OFF_CONFIRMATION.' in the box at the bottom. Nothing was saved.']
+            : [];
+
+        return [$values, $errors];
+    }
+
+    /** Safety screen: the names of the test contacts, so the IDs are readable. */
+    private function safetyExtras(array $keys): array
+    {
+        $ids = (array) config('calcom.test_person_ids', []);
+
+        return [
+            'inputNames' => collect($keys)->mapWithKeys(fn ($key) => [$key => $this->inputName($key)])->all(),
+            'testPeople' => $ids ? DB::table('persons')->whereIn('id', $ids)->pluck('name', 'id')->all() : [],
+            'guardKeys' => TxnSettings::GUARDS,
+            'confirmText' => TxnSettings::GUARD_OFF_CONFIRMATION,
+        ];
     }
 
     private function saveScreen(Request $request, string $screen): RedirectResponse
@@ -102,6 +149,10 @@ class TxnSettingsController extends Controller
                 default => array_intersect([$reset], TxnSettings::keys($screen)),
             };
 
+            // A guard only changes through its switch (turning it off needs the
+            // typed confirmation), never through a reset to the .env default.
+            $keys = array_diff($keys, array_keys(TxnSettings::GUARDS));
+
             $changes = TxnSettings::save($screen, array_fill_keys($keys, null), $userId);
 
             return $this->back($screen, $changes ? "Back to the default ({$changes} ".($changes === 1 ? 'setting' : 'settings').').' : 'Already the default.');
@@ -114,6 +165,7 @@ class TxnSettingsController extends Controller
             'follow-ups' => $this->followUps($request),
             'emails' => [$this->emails($request), []],
             'connections' => $this->connections($request),
+            'safety' => $this->safety($request),
         };
 
         $changes = TxnSettings::save($screen, $values, $userId, $errors);

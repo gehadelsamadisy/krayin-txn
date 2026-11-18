@@ -112,6 +112,17 @@
         .dark .txn-sidebar-toggle:hover { background: #030712; color: #fff; }
         html.dark.txn-sidebar-pinned .txn-sidebar-toggle { color: #38bdf8; }
         @media (max-width: 1023px) { .txn-sidebar-toggle { display: none; } }
+
+        /* TXN: "customers can get messages" banner (a Safety guard is off). */
+        .txn-live-banner {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+            padding: 10px 14px; border: 1px solid #d1453b; border-radius: 10px;
+            background: #fbe9e7; color: #9b2c24; font-size: 13px;
+        }
+        .txn-live-banner span { flex: 1 1 240px; }
+        .txn-live-banner a { font-weight: 600; color: #9b2c24; text-decoration: underline; }
+        .dark .txn-live-banner { background: #3a1714; border-color: #f07167; color: #fbd5d1; }
+        .dark .txn-live-banner a { color: #fbd5d1; }
     </style>
 
     <script>
@@ -177,6 +188,21 @@
             <div class="flex min-h-[calc(100vh-62px)] max-w-full flex-1 flex-col bg-gray-100 pt-3 transition-all duration-300 dark:bg-gray-950">
                 <!-- Page Content Blade Component -->
                 <div class="txn-page-content px-4 pb-6 ltr:lg:pl-[85px] rtl:lg:pr-[85px]">
+                    {{-- TXN: while a guard is off (Settings > TXN Settings > Safety), say so on
+                         the Settings pages and the contact page, where messages are sent. --}}
+                    @if (
+                        request()->routeIs('admin.settings.*', 'admin.contacts.persons.view')
+                        && ($txnGuardsOff = \Webkul\Admin\Support\Contact\TxnSettings::guardsOff())
+                    )
+                        <div class="txn-live-banner" role="status">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M12 9v4M12 16v.01"/></svg>
+                            <span><strong>Customers can get messages.</strong> Off: {{ implode(', ', $txnGuardsOff) }}.</span>
+                            @if (bouncer()->hasPermission('settings.txn.safety'))
+                                <a href="{{ route('admin.settings.txn.safety') }}">Safety settings</a>
+                            @endif
+                        </div>
+                    @endif
+
                     {{ $slot }}
                 </div>
 

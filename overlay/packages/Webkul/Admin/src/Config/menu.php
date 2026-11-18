@@ -356,6 +356,13 @@ return [
         'route' => 'admin.settings.txn.connections',
         'sort' => 7,
         'icon-class' => 'icon-settings-webhooks',
+    ], [
+        'key' => 'settings.txn.safety',
+        'name' => 'Safety',
+        'info' => 'Whether emails, texts and booking links can reach customers.',
+        'route' => 'admin.settings.txn.safety',
+        'sort' => 8,
+        'icon-class' => 'icon-role',
     ],
 
     /**

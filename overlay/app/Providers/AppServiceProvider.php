@@ -70,7 +70,8 @@ class AppServiceProvider extends ServiceProvider
             }
         });
 
-        // In test mode (TXN_TEST_MODE, config/txn.php) an email leaves only if
+        // While the email guard is on (txn.guard_email: Settings > TXN Settings >
+        // Safety, default TXN_TEST_MODE; missing = on) an email leaves only if
         // every recipient (to, cc, bcc) is in MAIL_ALLOWED_RECIPIENTS
         // (config/mail_guard.php). Anything else is not sent and is logged.
         // An empty list blocks every email.
@@ -80,7 +81,7 @@ class AppServiceProvider extends ServiceProvider
             $recipients = collect([...$message->getTo(), ...$message->getCc(), ...$message->getBcc()])
                 ->map(fn ($address) => strtolower($address->getAddress()));
 
-            if (config('txn.test_mode', true)
+            if (config('txn.guard_email', true)
                 && ($recipients->isEmpty() || $recipients->contains(fn ($address) => ! in_array($address, $allowed, true)))) {
                 Log::warning('Email not sent: a recipient is not in MAIL_ALLOWED_RECIPIENTS.', [
                     'to' => $recipients->all(),

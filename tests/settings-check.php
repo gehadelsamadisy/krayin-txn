@@ -374,6 +374,82 @@ try {
         $check('Mailer Microsoft 365 without its login -> refused', ! TxnSettings::isSaved('mail.default') || DB::table('txn_settings')->where('key', 'mail.default')->value('value') !== json_encode('graph'));
     }
 
+    // =====================================================================
+    $section = 'Safety (guards; turning one off needs the typed confirmation)';
+    // =====================================================================
+    $safetyUrl = route('admin.settings.txn.safety.update', [], false);
+    $safetyForm = function (array $change = [], bool $unlocked = true) use ($name) {
+        $form = ['unlocked' => $unlocked ? '1' : '0'];
+        foreach (TxnSettings::keys('safety') as $key) {
+            $value = config($key);
+            $form[$name($key)] = is_bool($value) ? ($value ? '1' : '0') : implode("\n", array_map('strval', (array) $value));
+        }
+
+        return array_merge($form, $change);
+    };
+    $sentTo = function (string $address) {
+        $transport = app('mail.manager')->mailer('array')->getSymfonyTransport();
+        $transport->flush();
+        Illuminate\Support\Facades\Mail::mailer('array')->raw('Safety check', fn ($message) => $message->to($address)->subject('Safety check'));
+
+        return count($transport->messages());
+    };
+
+    // Start from every guard on, with a known test list.
+    config([
+        'txn.guard_email' => true, 'txn.guard_sms' => true, 'txn.guard_calcom' => true,
+        'mail_guard.allowed_recipients' => ['tester@txn-check.example'],
+        'sms.allowed_recipients' => ['+17135550100'],
+        'calcom.test_person_ids' => [1],
+        'calcom.test_recipient_emails' => ['tester@txn-check.example'],
+    ]);
+
+    $page = $call('GET', route('admin.settings.txn.safety', [], false));
+    $check('Safety opens, locked ("Edit safety")', $page->getStatusCode() === 200 && str_contains((string) $page->getContent(), 'Edit safety'));
+
+    $check('Email guard on: a customer address is stopped', $sentTo('customer@txn-check.example') === 0);
+    $check('... an allowed test address goes out', $sentTo('tester@txn-check.example') === 1);
+
+    $call('PUT', $safetyUrl, $safetyForm([$name('txn.guard_email') => '0'], false));
+    $check('Save without unlocking -> refused, guard still on', config('txn.guard_email') === true);
+
+    $call('PUT', $safetyUrl, $safetyForm([$name('txn.guard_email') => '0']));
+    $check('Turning the email guard off without typing the confirmation -> refused', config('txn.guard_email') === true && ! TxnSettings::isSaved('txn.guard_email'));
+
+    $call('PUT', $safetyUrl, $safetyForm([$name('txn.guard_email') => '0', 'confirm_off' => 'send to customers']));
+    $check('... a wrongly typed confirmation -> refused', config('txn.guard_email') === true);
+
+    $call('PUT', $safetyUrl, $safetyForm([$name('txn.guard_email') => '0', 'confirm_off' => TxnSettings::GUARD_OFF_CONFIRMATION]));
+    $check('With SEND TO CUSTOMERS typed: email guard off', config('txn.guard_email') === false);
+    $logged = DB::table('txn_settings_log')->where('area', 'settings:safety')->where('item', 'Email guard')->orderByDesc('id')->first();
+    $check('... logged as on -> off with the user', $logged && $logged->old_value === 'on' && str_starts_with($logged->new_value, 'off') && (int) $logged->user_id === (int) $adminId, json_encode($logged));
+    $check('... and a customer address now goes out', $sentTo('customer@txn-check.example') === 1);
+    $check('... the SMS and Cal.com guards stayed on', config('txn.guard_sms') === true && config('txn.guard_calcom') === true);
+
+    $banner = (string) $call('GET', route('admin.settings.index', [], false))->getContent();
+    $check('Banner on the Settings page while a guard is off', str_contains($banner, 'Customers can get messages') && str_contains($banner, 'Email guard'));
+
+    $call('PUT', $safetyUrl, $safetyForm([$name('txn.guard_email') => '1']));
+    $check('Turning it back on needs no confirmation', config('txn.guard_email') === true);
+    $banner = (string) $call('GET', route('admin.settings.index', [], false))->getContent();
+    $check('... and the banner is gone', ! str_contains($banner, 'Customers can get messages'));
+
+    $call('PUT', $safetyUrl, $safetyForm(['reset' => 'txn.guard_email']));
+    $check('A guard is never reset to the .env value (only its switch changes it)', config('txn.guard_email') === true);
+
+    $call('PUT', $safetyUrl, $safetyForm([$name('sms.allowed_recipients') => "+17135550101\n+1 713 555 0102"]));
+    $check('Allowed test phones saved as a list', config('sms.allowed_recipients') === ['+17135550101', '+1 713 555 0102'], json_encode(config('sms.allowed_recipients')));
+    $call('PUT', $safetyUrl, $safetyForm([$name('mail_guard.allowed_recipients') => "tester@txn-check.example\nnot-an-email"]));
+    $check('A bad address in the test list -> refused', config('mail_guard.allowed_recipients') !== ['tester@txn-check.example', 'not-an-email']);
+
+    // A saved guard that can't be read counts as on.
+    config(['txn.guard_sms' => false]);
+    DB::table('txn_settings')->updateOrInsert(['key' => 'txn.guard_sms'], ['value' => json_encode('maybe'), 'created_at' => now(), 'updated_at' => now()]);
+    TxnSettings::apply();
+    $check('Unreadable saved guard -> treated as on (fail safe)', config('txn.guard_sms') === true);
+    DB::table('txn_settings')->where('key', 'txn.guard_sms')->delete();
+    config(['txn.guard_email' => true, 'txn.guard_sms' => true, 'txn.guard_calcom' => true]);
+
     $check('No call left this machine except the faked lookups', Http::recorded()->every(fn ($pair) => preg_match('/geocod\.io|twilio\.com/', $pair[0]->url())), Http::recorded()->count().' requests');
 } catch (Throwable $exception) {
     $check('Check script crashed', false, get_class($exception).': '.$exception->getMessage().' @ '.basename($exception->getFile()).':'.$exception->getLine());
