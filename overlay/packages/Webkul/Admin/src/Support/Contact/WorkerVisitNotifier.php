@@ -114,6 +114,12 @@ final class WorkerVisitNotifier
 
     private function send(Worker $worker, string $subject, string $body): void
     {
+        if (! ServiceHealth::hasKey('mail')) {
+            Log::warning('Krayin could not email a worker about a visit: '.ServiceHealth::noKey('mail'), ['worker_id' => $worker->id]);
+
+            return;
+        }
+
         try {
             Mail::raw($body, fn ($message) => $message->to($worker->email)->subject($subject));
         } catch (Throwable $exception) {
@@ -122,6 +128,10 @@ final class WorkerVisitNotifier
                 'subject' => $subject,
                 'exception_class' => get_class($exception),
             ]);
+
+            if ($exception instanceof \Symfony\Component\Mailer\Exception\TransportExceptionInterface) {
+                ServiceHealth::failed('mail', $exception->getMessage());
+            }
         }
     }
 }

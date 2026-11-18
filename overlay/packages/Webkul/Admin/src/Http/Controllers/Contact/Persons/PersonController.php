@@ -436,7 +436,9 @@ class PersonController extends Controller
             return redirect()
                 ->route('admin.contacts.persons.view', $person->id)
                 ->with('booking_link', $bookingUrl)
-                ->with('booking_link_error', 'The booking link was created, but Krayin could not send the email. Copy the link below and send it manually.');
+                ->with('booking_link_error', $exception instanceof \Webkul\Admin\Support\Contact\MailKeyMissingException
+                    ? 'The booking link was created, but the email was not sent: '.$exception->getMessage().' Copy the link below and send it manually.'
+                    : 'The booking link was created, but Krayin could not send the email. Copy the link below and send it manually.');
         }
 
         // Emailed: the customer has been contacted (only the link's lead when

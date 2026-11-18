@@ -42,8 +42,8 @@ final class SmsSender
         $service = config('sms.messaging_service_sid');
         $from = config('sms.from_number');
 
-        if (! $sid || ! $token || (! $service && ! $from)) {
-            return ['status' => 'failed', 'to' => $to, 'error' => 'Twilio is not configured (TWILIO_* in the Krayin environment).'];
+        if (! ServiceHealth::hasKey('twilio')) {
+            return ['status' => 'failed', 'to' => $to, 'error' => ServiceHealth::noKey('twilio')];
         }
 
         try {
@@ -56,7 +56,9 @@ final class SmsSender
                     'MessagingServiceSid' => $service ?: null,
                     'From' => $service ? null : $from,
                 ]));
-        } catch (ConnectionException) {
+        } catch (ConnectionException $exception) {
+            ServiceHealth::failed('twilio', 'Krayin could not connect to Twilio: '.$exception->getMessage());
+
             return ['status' => 'failed', 'to' => $to, 'error' => 'Krayin could not connect to Twilio.'];
         }
 
@@ -64,8 +66,15 @@ final class SmsSender
             $error = $response->json('message') ?? "HTTP {$response->status()}";
             Log::error('Twilio rejected an SMS.', ['to' => $to, 'person_id' => $person->id, 'error' => $error, 'code' => $response->json('code')]);
 
+            // A wrong account or token (not a problem with this one number).
+            if (ServiceHealth::isAuthFailure($response)) {
+                ServiceHealth::failed('twilio', "Twilio: {$error}".($response->json('code') ? ' (code '.$response->json('code').')' : ''));
+            }
+
             return ['status' => 'failed', 'to' => $to, 'error' => "Twilio: {$error}"];
         }
+
+        ServiceHealth::ok('twilio');
 
         $messageSid = (string) $response->json('sid');
         $this->note($person, $lead, $to, $body, $messageSid);

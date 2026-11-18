@@ -96,6 +96,10 @@ class AppServiceProvider extends ServiceProvider
             // HTML version keeps them readable everywhere.
             self::addMissingBodyPart($message);
         });
+
+        // An email actually left: the mail service works (clears its alert,
+        // Support\Contact\ServiceHealth).
+        Event::listen(\Illuminate\Mail\Events\MessageSent::class, fn () => \Webkul\Admin\Support\Contact\ServiceHealth::ok('mail'));
     }
 
     private static function addMissingBodyPart(\Symfony\Component\Mime\Email $message): void

@@ -1,7 +1,7 @@
 <?php
 
-// Twilio SMS (Support\Contact\SmsSender), the same account as the TXNHome
-// lead service. Values come from the Krayin environment; never put them here.
+// Twilio SMS (Support\Contact\SmsSender): Krayin's own settings, from the Krayin
+// environment (TWILIO_*) or Settings > TXN Settings > Connections. Never put values here.
 return [
     'account_sid' => env('TWILIO_ACCOUNT_SID'),
     'auth_token' => env('TWILIO_AUTH_TOKEN'),

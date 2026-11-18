@@ -793,19 +793,28 @@ final class SlotSuggestionService
 
         $apiKey = config('slot_finder.geocodio_api_key');
 
-        if (! filled($apiKey)) {
-            throw new SlotSuggestionException('Set GEOCODIO_API_KEY in the Krayin environment to locate addresses.');
+        if (! ServiceHealth::hasKey('geocodio')) {
+            throw new SlotSuggestionException(ServiceHealth::noKey('geocodio'));
         }
 
         try {
             $response = Http::timeout(10)->get('https://api.geocod.io/v1.7/geocode', $params + ['api_key' => $apiKey]);
-        } catch (ConnectionException) {
+        } catch (ConnectionException $exception) {
+            ServiceHealth::failed('geocodio', 'Krayin could not connect to Geocodio: '.$exception->getMessage());
+
             throw new SlotSuggestionException('Could not reach Geocodio to locate the address. Try again.');
         }
 
+        // 422 = this address can't be found: a problem with one address, not with Geocodio.
         if ($response->status() !== 422 && ! $response->successful()) {
+            if (ServiceHealth::isAuthFailure($response)) {
+                ServiceHealth::failed('geocodio', "Geocodio refused the API key (HTTP {$response->status()}): ".($response->json('error') ?? $response->body()));
+            }
+
             throw new SlotSuggestionException("Geocodio returned HTTP {$response->status()}. Check the API key.");
         }
+
+        ServiceHealth::ok('geocodio');
 
         $first = $response->json('results.0');
         $result = $response->successful() && $first ? [

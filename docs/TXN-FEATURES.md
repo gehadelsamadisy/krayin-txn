@@ -130,8 +130,8 @@ stock `config/mail.php` is unchanged; the guard above applies as with SMTP.
 
 ## SMS (Twilio): one allowed test number
 
-`Support\Contact\SmsSender` sends texts through Twilio's API with the same
-account as the TXNHome lead service (`config/sms.php`: `TWILIO_ACCOUNT_SID`,
+`Support\Contact\SmsSender` sends texts through Twilio's API with Krayin's
+own settings (`config/sms.php`: `TWILIO_ACCOUNT_SID`,
 `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID` or `TWILIO_FROM_NUMBER`
 in the Krayin environment). Like the email guard, a text leaves only if the
 number is in `SMS_ALLOWED_RECIPIENTS` (comma-separated; empty = nothing is

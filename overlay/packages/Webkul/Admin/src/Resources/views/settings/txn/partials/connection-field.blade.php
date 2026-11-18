@@ -1,17 +1,26 @@
-{{-- One field on the Connections screen. Data: $key, $fields, $values, $defaults, $saved, $secrets, $inputNames, $canEdit.
+{{-- One field on the Connections screen. Data: $key, $fields, $values, $defaults, $saved, $secrets, $inputNames, $canEdit,
+     optional $problem (ServiceHealth: the card's service failed or was used without a key).
      A secret never has its value on the page: only where it comes from and its last 4 characters. --}}
 @php
     [, $type, $label, $options] = $fields[$key];
     $name = $inputNames[$key];
     $sourceText = ['saved' => 'Saved in Krayin', 'env' => 'From .env', 'none' => 'Not set'];
+    $problem ??= null;
+    $isEmpty = $type === 'secret'
+        ? ($secrets[$key]['source'] ?? 'none') === 'none'
+        : in_array(strtoupper(trim((string) ($values[$key] ?? ''))), ['', 'CHANGE_ME'], true);
+    // Failing: every key of the service is a suspect. No key: only the empty ones.
+    $flag = $problem && ($problem['state'] === 'failed' || $isEmpty)
+        ? ($problem['state'] === 'failed' ? 'Check this key' : 'This key is missing')
+        : null;
 @endphp
 
 @if ($type === 'secret')
     @php $status = $secrets[$key]; @endphp
 
-    <div class="tc-field tc-wide">
+    <div class="tc-field tc-wide {{ $flag ? 'tc-field-problem' : '' }}">
         <div class="tc-label-row">
-            <label for="f-{{ $name }}" class="tc-label">{{ $label }}</label>
+            <label for="f-{{ $name }}" class="tc-label">{{ $label }}@if ($flag) <span class="tc-flag">{{ $flag }}</span>@endif</label>
 
             <span class="tc-source">
                 @if ($status['unreadable'])
@@ -47,8 +56,8 @@
         @endif
     </div>
 @else
-    <div class="tc-field">
-        <label for="f-{{ $name }}" class="tc-label">{{ $label }}</label>
+    <div class="tc-field {{ $flag ? 'tc-field-problem' : '' }}">
+        <label for="f-{{ $name }}" class="tc-label">{{ $label }}@if ($flag) <span class="tc-flag">{{ $flag }}</span>@endif</label>
 
         <input
             id="f-{{ $name }}"

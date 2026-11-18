@@ -38,8 +38,19 @@
                 return $state;
             };
 
+            // A recorded problem (ServiceHealth) wins: "failing" (red) or "nokey" (amber).
+            $problemState = fn (string $card) => match ($problems[$card]['state'] ?? null) {
+                'failed' => 'failing',
+                'no_key' => 'nokey',
+                default => null,
+            };
+
             $email = $groups['email'];
             $mailerState = collect($email['mailers'])->map(fn ($mailer) => $stateOf(array_merge($email['keys'], $mailer['keys'])))->all();
+            // An email problem belongs to the mailer that was sending.
+            if (($emailProblem = $problemState('email')) && isset($mailerState[$values['mail.default']])) {
+                $mailerState[$values['mail.default']] = $emailProblem;
+            }
             $fieldData = compact('fields', 'values', 'defaults', 'saved', 'secrets', 'inputNames', 'canEdit');
         @endphp
 
@@ -87,7 +98,9 @@
                     @foreach ($groups as $id => $group)
                         @php
                             $isEmail = $id === 'email';
-                            $state = $isEmail ? null : $stateOf($group['keys']);
+                            $state = $isEmail ? null : ($problemState($id) ?? $stateOf($group['keys']));
+                            $problem = $problems[$id] ?? null;
+                            $cardData = $fieldData + ['problem' => $problem];
                         @endphp
 
                         <section
@@ -136,10 +149,21 @@
                                 <span v-text="result({!! $isEmail ? 'mailerTest' : "'{$group['test']}'" !!}).message"></span>
                             </p>
 
+                            {{-- What Krayin saw when it last used this service (until a Test result replaces it). --}}
+                            @if ($problem)
+                                <template v-if="! result({!! $isEmail ? 'mailerTest' : "'{$group['test']}'" !!})">
+                                    <div class="tc-problem {{ $problem['state'] === 'no_key' ? 'is-nokey' : 'is-failed' }}" role="alert" v-pre>
+                                        <strong>{{ $problem['state'] === 'no_key' ? 'No key assigned.' : 'Not working.' }}</strong>
+                                        <span class="tc-problem-when">Seen {{ \Carbon\Carbon::parse($problem['failed_at'])->format('M j, g:i A') }}</span>
+                                        <p>{{ $problem['message'] }}</p>
+                                    </div>
+                                </template>
+                            @endif
+
                             <div class="tc-body">
                                 <div class="tc-grid">
                                     @foreach ($group['keys'] as $key)
-                                        @include('admin::settings.txn.partials.connection-field', $fieldData + ['key' => $key])
+                                        @include('admin::settings.txn.partials.connection-field', $cardData + ['key' => $key])
                                     @endforeach
                                 </div>
 
@@ -167,7 +191,7 @@
 
                                             <div class="tc-grid">
                                                 @foreach ($mailer['keys'] as $key)
-                                                    @include('admin::settings.txn.partials.connection-field', $fieldData + ['key' => $key])
+                                                    @include('admin::settings.txn.partials.connection-field', $cardData + ['key' => $key])
                                                 @endforeach
                                             </div>
                                         </div>
@@ -209,6 +233,8 @@
                             bad: "Saved key can't be read",
                             passed: 'Test passed',
                             failed: 'Test failed',
+                            failing: 'Not working',
+                            nokey: 'No key',
                         },
                     };
                 },

@@ -66,10 +66,12 @@ class LeadDbImportService
         $result = ['contacts' => 0, 'changed' => 0, 'unchanged' => 0, 'not_found' => 0, 'skipped' => 0,
             'errors' => [], 'changed_ids' => [], 'dry_run' => $dryRun];
 
-        $source = DB::connection('lead_db')->table('lead')
+        $this->requireLogin();
+
+        $source = $this->readLeadDb(fn () => DB::connection('lead_db')->table('lead')
             ->select(['id', 'source', 'source_lead_id', 'email', 'phone'])
             ->get()
-            ->keyBy(fn ($row) => strtoupper($row->source).'|'.$row->source_lead_id);
+            ->keyBy(fn ($row) => strtoupper($row->source).'|'.$row->source_lead_id));
 
         // contact id => that contact's lead-database rows
         $byPerson = [];
@@ -151,16 +153,42 @@ class LeadDbImportService
 
     private function run(callable $filter, bool $dryRun): array
     {
+        $this->requireLogin();
+
         // One import at a time (TXNHome call, button, cron); waits up to 60 s
         // for a running one, then throws LockTimeoutException.
         return Cache::lock('txn-lead-db-import', 600)->block(60, function () use ($filter, $dryRun) {
-            $rows = $filter(DB::connection('lead_db')->table('lead')->select(self::COLUMNS))
+            $rows = $this->readLeadDb(fn () => $filter(DB::connection('lead_db')->table('lead')->select(self::COLUMNS))
                 ->orderBy('id')
                 ->get()
                 ->map(fn ($row) => (array) $row)
-                ->all();
+                ->all());
 
             return $this->import->importRowsSkippingBad($rows, $dryRun);
         });
+    }
+
+    /** The lead database login must be set (ServiceHealth: amber bar when it isn't). */
+    private function requireLogin(): void
+    {
+        if (! ServiceHealth::hasKey('lead_db')) {
+            throw new \RuntimeException(ServiceHealth::noKey('lead_db'));
+        }
+    }
+
+    /** Runs a read on the lead database and records whether the connection worked. */
+    private function readLeadDb(callable $read): mixed
+    {
+        try {
+            $result = $read();
+        } catch (\Illuminate\Database\QueryException|\PDOException $exception) {
+            ServiceHealth::failed('lead_db', 'Krayin could not read the lead database: '.$exception->getMessage());
+
+            throw $exception;
+        }
+
+        ServiceHealth::ok('lead_db');
+
+        return $result;
     }
 }

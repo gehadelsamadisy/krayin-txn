@@ -192,7 +192,19 @@ class TxnSettingsController extends Controller
             return response()->json(['ok' => false, 'message' => 'Click "Edit keys" and confirm first.'], 403);
         }
 
-        return response()->json((new TxnConnectionTester($this->connectionFormValues($request)))->run($test));
+        $result = (new TxnConnectionTester($this->connectionFormValues($request)))->run($test);
+
+        // A Test is a real use of the service: it updates the every-page alert.
+        $service = \Webkul\Admin\Support\Contact\ServiceHealth::serviceForTest($test);
+        if ($service) {
+            match (true) {
+                $result['ok'] => \Webkul\Admin\Support\Contact\ServiceHealth::ok($service),
+                str_starts_with($result['message'], 'Missing:') => \Webkul\Admin\Support\Contact\ServiceHealth::noKey($service),
+                default => \Webkul\Admin\Support\Contact\ServiceHealth::failed($service, $result['message']),
+            };
+        }
+
+        return response()->json($result);
     }
 
     /** Form field name of a setting: "sms.auth_token" -> "sms__auth_token". */
@@ -268,6 +280,8 @@ class TxnSettingsController extends Controller
             'groups' => TxnSettings::CONNECTION_GROUPS,
             'inputNames' => collect($keys)->mapWithKeys(fn ($key) => [$key => $this->inputName($key)])->all(),
             'secrets' => collect($keys)->filter([TxnSettings::class, 'isSecret'])->mapWithKeys(fn ($key) => [$key => TxnSettings::secretStatus($key)])->all(),
+            // Card id => current problem (failed / no_key), Support\Contact\ServiceHealth.
+            'problems' => collect(\Webkul\Admin\Support\Contact\ServiceHealth::problems())->keyBy('card')->all(),
         ];
     }
 

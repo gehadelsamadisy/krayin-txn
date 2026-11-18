@@ -361,8 +361,8 @@ final class CalcomBookingSyncService
     {
         $apiKey = config('calcom.api_key');
 
-        if (! is_string($apiKey) || $apiKey === '') {
-            throw new CalcomApiException('Cal.com is not configured. Set CALCOM_API_KEY in the Krayin environment.');
+        if (! ServiceHealth::hasKey('calcom')) {
+            throw new CalcomApiException(ServiceHealth::noKey('calcom'));
         }
 
         $bookings = [];
@@ -380,12 +380,20 @@ final class CalcomBookingSyncService
                         'skip'       => $skip,
                     ]);
             } catch (ConnectionException $exception) {
+                ServiceHealth::failed('calcom', 'Krayin could not connect to Cal.com: '.$exception->getMessage());
+
                 throw new CalcomApiException('Krayin could not connect to Cal.com to read bookings.', 0, $exception);
             }
 
             if (! $response->successful()) {
+                if (ServiceHealth::isAuthFailure($response)) {
+                    ServiceHealth::failed('calcom', "Cal.com refused the API key (HTTP {$response->status()}): ".($response->json('error.message') ?? $response->json('message') ?? $response->body()));
+                }
+
                 throw new CalcomApiException("Cal.com rejected the bookings request (HTTP {$response->status()}).");
             }
+
+            ServiceHealth::ok('calcom');
 
             $page = $response->json('data') ?? [];
             $bookings = array_merge($bookings, $page);

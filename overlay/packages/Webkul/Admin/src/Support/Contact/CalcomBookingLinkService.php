@@ -382,8 +382,8 @@ final class CalcomBookingLinkService
     {
         $apiKey = config('calcom.api_key');
 
-        if (! is_string($apiKey) || $apiKey === '') {
-            throw new CalcomApiException('Cal.com is not configured. Set CALCOM_API_KEY in the Krayin environment.');
+        if (! ServiceHealth::hasKey('calcom')) {
+            throw new CalcomApiException(ServiceHealth::noKey('calcom'));
         }
 
         try {
@@ -397,6 +397,7 @@ final class CalcomBookingLinkService
                 'operation' => $operation,
                 'exception_class' => get_class($exception),
             ]);
+            ServiceHealth::failed('calcom', 'Krayin could not connect to Cal.com: '.$exception->getMessage());
 
             throw new CalcomApiException('Krayin could not connect to Cal.com. Check the server connection and try again.', 0, $exception);
         }
@@ -412,11 +413,17 @@ final class CalcomBookingLinkService
                 'reason' => $reason,
             ]);
 
+            if (ServiceHealth::isAuthFailure($response)) {
+                ServiceHealth::failed('calcom', "Cal.com refused the API key (HTTP {$response->status()})".($reason ? ": {$reason}" : '.'));
+            }
+
             throw new CalcomApiException(
                 "Cal.com rejected the {$operation} request (HTTP {$response->status()})"
                 .($reason ? ": {$reason}" : '. Check the API key and Cal.com account settings.')
             );
         }
+
+        ServiceHealth::ok('calcom');
 
         return $response;
     }

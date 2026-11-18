@@ -241,19 +241,33 @@ final class FollowUpService
             return false; // nothing to check against; the stage rule still applies
         }
 
+        if (! ServiceHealth::hasKey('calcom')) {
+            ServiceHealth::noKey('calcom');
+
+            return null;
+        }
+
         try {
             $response = Http::withToken((string) config('calcom.api_key'))
                 ->acceptJson()
                 ->withHeaders(['cal-api-version' => self::CALCOM_BOOKINGS_VERSION])
                 ->timeout(20)
                 ->get(self::CALCOM_API.'/bookings', ['eventTypeId' => $eventTypeId, 'take' => 20]);
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
+            ServiceHealth::failed('calcom', 'Krayin could not connect to Cal.com: '.$exception->getMessage());
+
             return null;
         }
 
         if (! $response->successful()) {
+            if (ServiceHealth::isAuthFailure($response)) {
+                ServiceHealth::failed('calcom', "Cal.com refused the API key (HTTP {$response->status()}): ".($response->json('error.message') ?? $response->json('message') ?? $response->body()));
+            }
+
             return null;
         }
+
+        ServiceHealth::ok('calcom');
 
         return collect($response->json('data') ?? [])
             ->contains(fn ($booking) => (int) data_get($booking, 'eventTypeId', data_get($booking, 'eventType.id')) === (int) $eventTypeId

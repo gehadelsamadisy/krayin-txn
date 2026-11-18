@@ -123,6 +123,24 @@
         .txn-live-banner a { font-weight: 600; color: #9b2c24; text-decoration: underline; }
         .dark .txn-live-banner { background: #3a1714; border-color: #f07167; color: #fbd5d1; }
         .dark .txn-live-banner a { color: #fbd5d1; }
+
+        /* TXN: a service isn't working (red) or has no key (amber): ServiceHealth. */
+        .txn-service-banner {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+            padding: 10px 14px; border-radius: 10px; font-size: 13px; line-height: 1.45;
+        }
+        .txn-service-banner > span:first-of-type { flex: 1 1 260px; overflow-wrap: anywhere; }
+        .txn-service-banner a { font-weight: 600; text-decoration: underline; white-space: nowrap; }
+        .txn-service-banner svg { flex: 0 0 auto; }
+        .txn-service-when { opacity: .75; }
+        .txn-service-banner.is-failed { border: 1px solid #d1453b; background: #fbe9e7; color: #9b2c24; }
+        .txn-service-banner.is-failed a { color: #9b2c24; }
+        .txn-service-banner.is-nokey { border: 1px solid #c9822b; background: #fbf1e3; color: #8a5413; }
+        .txn-service-banner.is-nokey a { color: #8a5413; }
+        .dark .txn-service-banner.is-failed { background: #3a1714; border-color: #f07167; color: #fbd5d1; }
+        .dark .txn-service-banner.is-failed a { color: #fbd5d1; }
+        .dark .txn-service-banner.is-nokey { background: #33260f; border-color: #e3a356; color: #f6dfbf; }
+        .dark .txn-service-banner.is-nokey a { color: #f6dfbf; }
     </style>
 
     <script>
@@ -202,6 +220,28 @@
                             @endif
                         </div>
                     @endif
+
+                    {{-- TXN: a service Krayin uses failed (red) or was used without a key
+                         (amber), on every page (Support\Contact\ServiceHealth). --}}
+                    @foreach (\Webkul\Admin\Support\Contact\ServiceHealth::problems() as $txnProblem)
+                        <div class="txn-service-banner {{ $txnProblem['state'] === 'no_key' ? 'is-nokey' : 'is-failed' }}" role="alert" v-pre>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17v.01"/></svg>
+                            <span>
+                                @if ($txnProblem['state'] === 'no_key')
+                                    <strong>{{ $txnProblem['label'] }} has no key assigned.</strong>
+                                @else
+                                    <strong>{{ $txnProblem['label'] }} isn't working:</strong>
+                                    {{ strtok($txnProblem['message'], "\n") }}
+                                @endif
+                                <span class="txn-service-when">({{ \Carbon\Carbon::parse($txnProblem['failed_at'])->format('M j, g:i A') }})</span>
+                            </span>
+                            @if (bouncer()->hasPermission('settings.txn.connections'))
+                                <a href="{{ route('admin.settings.txn.connections') }}#tc-{{ $txnProblem['card'] }}">{{ $txnProblem['state'] === 'no_key' ? 'Add its key in Connections' : 'Check its keys in Connections' }}</a>
+                            @else
+                                <span class="txn-service-when">Tell an administrator.</span>
+                            @endif
+                        </div>
+                    @endforeach
 
                     {{ $slot }}
                 </div>

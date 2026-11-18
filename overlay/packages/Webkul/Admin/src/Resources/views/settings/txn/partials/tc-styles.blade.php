@@ -138,5 +138,21 @@
     .tc-confirm p { margin: 0; font-size: 13px; line-height: 1.45; }
     .tc-confirm .tc-input { max-width: 320px; letter-spacing: .02em; }
     @media (prefers-reduced-motion: reduce) { .tc-toggle-track, .tc-toggle-track::after { transition: none; } }
+
+    /* A service Krayin uses failed (red) or was used without a key (amber): ServiceHealth. */
+    .tc-state-failing { --tc-rail: var(--tc-bad); }
+    .tc-state-failing .tc-head { background: var(--tc-bad-soft); }
+    .tc-state-nokey { --tc-rail: var(--tc-warn); }
+    .tc-state-nokey .tc-head { background: var(--tc-warn-soft); }
+    .tc-problem { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; padding: 12px 20px 12px 24px; font-size: 13px; line-height: 1.45; border-bottom: 1px solid var(--tc-line); }
+    .tc-problem.is-failed { background: var(--tc-bad-soft); color: var(--tc-bad); }
+    .tc-problem.is-nokey { background: var(--tc-warn-soft); color: var(--tc-warn); }
+    .tc-problem strong { font-weight: 700; }
+    .tc-problem-when { opacity: .8; font-size: 12px; }
+    .tc-problem p { flex: 1 0 100%; margin: 0; color: var(--tc-ink); white-space: pre-wrap; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+    .tc-field-problem .tc-input { border-color: var(--tc-bad); box-shadow: 0 0 0 3px var(--tc-bad-soft); }
+    .tc-state-nokey .tc-field-problem .tc-input { border-color: var(--tc-warn); box-shadow: 0 0 0 3px var(--tc-warn-soft); }
+    .tc-flag { margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: var(--tc-bad-soft); color: var(--tc-bad); font-size: 11.5px; font-weight: 600; }
+    .tc-state-nokey .tc-flag { background: var(--tc-warn-soft); color: var(--tc-warn); }
 </style>
 @endPushOnce

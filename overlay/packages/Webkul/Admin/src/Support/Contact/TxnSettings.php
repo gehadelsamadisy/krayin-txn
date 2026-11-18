@@ -67,7 +67,7 @@ final class TxnSettings
             'title' => 'Twilio',
             'mark' => 'Tw',
             'purpose' => 'Sends the booking-link texts.',
-            'note' => 'TXNHome keeps its own copy in its .env. Changing these here does not change TXNHome.',
+            'note' => "Krayin sends every text with these settings (Krayin's .env, or the value saved here). It doesn't use TXNHome's settings.",
             'test' => 'twilio',
             'keys' => ['sms.account_sid', 'sms.auth_token', 'sms.messaging_service_sid', 'sms.from_number'],
         ],
@@ -435,7 +435,9 @@ final class TxnSettings
         $changes = 0;
         $before = self::connectionSnapshot();
 
-        DB::transaction(function () use ($clean, $fields, $screen, $userId, &$changes) {
+        $changedKeys = [];
+
+        DB::transaction(function () use ($clean, $fields, $screen, $userId, &$changes, &$changedKeys) {
             foreach ($clean as $key => $value) {
                 $secret = $fields[$key][1] === 'secret';
                 $guard = $fields[$key][1] === 'guard';
@@ -474,10 +476,16 @@ final class TxnSettings
                 ]);
 
                 $changes++;
+                $changedKeys[] = $key;
             }
         });
 
         self::refreshConnections($before);
+
+        // A new key or login for a service: clear its alert until it is used again.
+        foreach (array_unique(array_filter(array_map([ServiceHealth::class, 'serviceForKey'], $changedKeys))) as $service) {
+            ServiceHealth::ok($service);
+        }
 
         return $changes;
     }

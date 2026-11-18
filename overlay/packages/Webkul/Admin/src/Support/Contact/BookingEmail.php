@@ -32,11 +32,22 @@ final class BookingEmail
     /** Sends one of the emails with $data from data() (subject/intro/closing may have been edited). */
     public function send(string $kind, string $to, array $data): void
     {
-        Mail::send(
-            ['html' => 'admin::emails.booking-link', 'text' => 'admin::emails.booking-link-text'],
-            ['kind' => $kind] + $data,
-            fn ($message) => $message->to($to)->subject(self::plain($data['subject']))
-        );
+        if (! ServiceHealth::hasKey('mail')) {
+            throw new MailKeyMissingException(ServiceHealth::noKey('mail'));
+        }
+
+        try {
+            Mail::send(
+                ['html' => 'admin::emails.booking-link', 'text' => 'admin::emails.booking-link-text'],
+                ['kind' => $kind] + $data,
+                fn ($message) => $message->to($to)->subject(self::plain($data['subject']))
+            );
+        } catch (\Symfony\Component\Mailer\Exception\TransportExceptionInterface $exception) {
+            // Login/connection to the mail service failed (ServiceHealth: red bar).
+            ServiceHealth::failed('mail', $exception->getMessage());
+
+            throw $exception;
+        }
     }
 
     /** Placeholder values for the templates. */
