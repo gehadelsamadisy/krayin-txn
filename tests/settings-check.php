@@ -42,6 +42,9 @@ Http::fake([
         'location' => ['lat' => 29.7604, 'lng' => -95.3698],
         'accuracy_type' => 'rooftop',
     ]]]),
+    // Connections > Test Twilio: a fake account and Messaging Service (nothing is sent).
+    'api.twilio.com/*' => Http::response(['friendly_name' => 'Check Account', 'type' => 'Full', 'status' => 'active']),
+    'messaging.twilio.com/*' => Http::response(['friendly_name' => 'Check Service']),
     '*' => Http::response([], 500),
 ]);
 
@@ -294,7 +297,84 @@ try {
     TxnSettings::apply();
     $check('An invalid stored value is ignored (the default applies)', config('slot_finder.slot_times') === TxnSettings::default('slot_finder.slot_times'), json_encode(config('slot_finder.slot_times')));
 
-    $check('No call left this machine except the faked map lookups', Http::recorded()->every(fn ($pair) => str_contains($pair[0]->url(), 'geocod.io')), Http::recorded()->count().' requests');
+    // =====================================================================
+    $section = 'Connections (keys, locked until "Edit keys")';
+    // =====================================================================
+    $connUrl = route('admin.settings.txn.connections.update', [], false);
+    $testUrl = route('admin.settings.txn.connections.test', [], false);
+    $name = fn (string $key) => str_replace('.', '__', $key);
+    $token = 'chk'.bin2hex(random_bytes(16)); // a fake Twilio token, never real
+    $sid = 'AC'.str_repeat('a1', 16);
+    $service = 'MG'.str_repeat('b2', 16);
+
+    // The form as the page sends it: plain fields as they are, secrets empty (= keep).
+    $connForm = function (array $change = [], bool $unlocked = true) use ($name) {
+        $form = ['unlocked' => $unlocked ? '1' : '0'];
+        foreach (TxnSettings::keys('connections') as $key) {
+            $form[$name($key)] = TxnSettings::isSecret($key) ? '' : (string) ($key === 'mail.default' ? TxnSettings::default($key) : config($key));
+        }
+
+        return array_merge($form, $change);
+    };
+    $rawToken = fn () => (string) DB::table('txn_settings')->where('key', 'sms.auth_token')->value('value');
+    $envToken = TxnSettings::default('sms.auth_token');
+
+    $page = $call('GET', route('admin.settings.txn.connections', [], false));
+    $check('Connections opens, locked ("Edit keys")', $page->getStatusCode() === 200 && str_contains((string) $page->getContent(), 'Edit keys'));
+
+    $call('PUT', $connUrl, $connForm([$name('sms.auth_token') => $token], false));
+    $check('Save without unlocking -> refused, nothing saved', ! TxnSettings::isSaved('sms.auth_token'));
+
+    $call('PUT', $connUrl, $connForm([$name('sms.auth_token') => $token, $name('sms.account_sid') => $sid, $name('sms.messaging_service_sid') => $service]));
+    $check('Unlocked save: token used at once', config('sms.auth_token') === $token && config('sms.account_sid') === $sid);
+    $check('... stored encrypted (not the plain token)', $rawToken() !== '' && ! str_contains($rawToken(), $token));
+    $logged = DB::table('txn_settings_log')->where('area', 'settings:connections')->where('item', 'Twilio Auth token')->orderByDesc('id')->first();
+    $check('... logged as "ends …" only', $logged && str_contains($logged->new_value, 'ends …'.substr($token, -4)) && ! str_contains($logged->new_value.$logged->old_value, $token), json_encode($logged));
+
+    $html = (string) $call('GET', route('admin.settings.txn.connections', [], false))->getContent();
+    $check('The page shows "Saved in Krayin · ends …" and never the token', str_contains($html, 'Saved in Krayin') && str_contains($html, '…'.substr($token, -4)) && ! str_contains($html, $token));
+    $check('... nor the .env token', ! filled($envToken) || ! str_contains($html, (string) $envToken));
+
+    $call('PUT', $connUrl, $connForm());
+    $check('An empty secret keeps the saved one', config('sms.auth_token') === $token && TxnSettings::isSaved('sms.auth_token'));
+
+    config(['sms.auth_token' => 'something-else']);
+    TxnSettings::apply();
+    $check('apply() decrypts the saved token again', config('sms.auth_token') === $token);
+
+    $before = $rawToken();
+    $call('PUT', $connUrl, $connForm([$name('sms.account_sid') => 'XX123']));
+    $check('A bad Account SID -> refused, nothing changed', config('sms.account_sid') === $sid && $rawToken() === $before);
+    $check('... and the typed token is not kept in the session', ! str_contains(json_encode(session()->all()), $token));
+
+    // Test buttons
+    $result = $call('POST', $testUrl, $connForm(['service' => 'twilio']));
+    $json = json_decode((string) $result->getContent(), true);
+    $check('Test Twilio (faked): ok, account and service found, no SMS', ($json['ok'] ?? false) === true && str_contains($json['message'] ?? '', 'Check Account') && str_contains($json['message'] ?? '', 'No SMS was sent'), (string) $result->getContent());
+    $check('... the test message never contains the token', ! str_contains((string) $result->getContent(), $token));
+    $check('... and no message was posted to Twilio', Http::recorded()->every(fn ($pair) => $pair[0]->method() === 'GET' || ! str_contains($pair[0]->url(), 'twilio.com')));
+    $locked = $call('POST', $testUrl, $connForm(['service' => 'twilio'], false));
+    $check('Test without unlocking -> refused (403)', $locked->getStatusCode() === 403);
+
+    // A saved key that can't be decrypted (APP_KEY changed) -> .env applies.
+    DB::table('txn_settings')->where('key', 'sms.auth_token')->update(['value' => json_encode('not-a-valid-encrypted-value')]);
+    TxnSettings::apply();
+    $check('Unreadable saved token -> the .env value is used, the screen warns', config('sms.auth_token') == $envToken && TxnSettings::secretStatus('sms.auth_token')['unreadable'] === true);
+
+    $call('PUT', $connUrl, $connForm([$name('sms.auth_token') => $token]));
+    $call('PUT', $connUrl, $connForm(['reset' => 'sms.auth_token']));
+    $check('"Use .env value" deletes the saved token', ! TxnSettings::isSaved('sms.auth_token') && config('sms.auth_token') == $envToken);
+
+    $mailer = config('mail.default');
+    $call('PUT', $connUrl, $connForm([$name('mail.default') => 'smtp']));
+    $check('A check script\'s array mailer is never replaced by a save', config('mail.default') === $mailer, (string) config('mail.default'));
+
+    if (! filled(config('graph_mail.client_secret'))) {
+        $call('PUT', $connUrl, $connForm([$name('mail.default') => 'graph', $name('graph_mail.tenant_id') => '', $name('graph_mail.client_id') => '']));
+        $check('Mailer Microsoft 365 without its login -> refused', ! TxnSettings::isSaved('mail.default') || DB::table('txn_settings')->where('key', 'mail.default')->value('value') !== json_encode('graph'));
+    }
+
+    $check('No call left this machine except the faked lookups', Http::recorded()->every(fn ($pair) => preg_match('/geocod\.io|twilio\.com/', $pair[0]->url())), Http::recorded()->count().' requests');
 } catch (Throwable $exception) {
     $check('Check script crashed', false, get_class($exception).': '.$exception->getMessage().' @ '.basename($exception->getFile()).':'.$exception->getLine());
 } finally {

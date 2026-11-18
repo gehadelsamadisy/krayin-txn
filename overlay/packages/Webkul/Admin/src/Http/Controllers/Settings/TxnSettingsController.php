@@ -2,6 +2,7 @@
 
 namespace Webkul\Admin\Http\Controllers\Settings;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -11,12 +12,15 @@ use Webkul\Admin\Http\Controllers\Controller;
 use Webkul\Admin\Support\Contact\BookingEmail;
 use Webkul\Admin\Support\Contact\SlotSuggestionException;
 use Webkul\Admin\Support\Contact\SlotSuggestionService;
+use Webkul\Admin\Support\Contact\TxnConnectionTester;
 use Webkul\Admin\Support\Contact\TxnSettings;
 
 /**
  * Settings > TXN Settings: Company & sender, Services, Service area &
- * scheduling, Follow-ups, Emails (Support\Contact\TxnSettings). One route
- * pair per screen (own permissions); the screen comes from the route.
+ * scheduling, Follow-ups, Emails, Connections (Support\Contact\TxnSettings).
+ * One route pair per screen (own permissions); the screen comes from the route.
+ * Connections is locked until "Edit keys" is confirmed (unlocked=1) and has
+ * Test buttons (TxnConnectionTester).
  * "reset" in the form puts settings back to their defaults: a key, an email
  * group ("emails:link") or "all" for the whole screen.
  */
@@ -32,8 +36,9 @@ class TxnSettingsController extends Controller
             'screen' => $screen,
             'title' => TxnSettings::SCREENS[$screen][0],
             'info' => TxnSettings::SCREENS[$screen][1],
-            'values' => collect($keys)->mapWithKeys(fn ($key) => [$key => config($key)])->all(),
-            'defaults' => collect($keys)->mapWithKeys(fn ($key) => [$key => TxnSettings::default($key)])->all(),
+            // A secret's value never goes to the page (secretStatus() shows its ending).
+            'values' => collect($keys)->mapWithKeys(fn ($key) => [$key => TxnSettings::isSecret($key) ? null : config($key)])->all(),
+            'defaults' => collect($keys)->mapWithKeys(fn ($key) => [$key => TxnSettings::isSecret($key) ? null : TxnSettings::default($key)])->all(),
             'saved' => DB::table('txn_settings')->whereIn('key', $keys)->pluck('key')->flip()->all(),
             'fields' => array_intersect_key(TxnSettings::fields(), array_flip($keys)),
             'canEdit' => bouncer()->hasPermission("settings.txn.{$this->aclKey($screen)}.edit"),
@@ -43,13 +48,51 @@ class TxnSettingsController extends Controller
                 ->orderByDesc('l.id')
                 ->limit(30)
                 ->get(['l.created_at', 'u.name as user', 'l.item', 'l.old_value', 'l.new_value']),
-        ] + ($screen === 'emails' ? $this->emailExtras() : []));
+        ] + match ($screen) {
+            'emails' => $this->emailExtras(),
+            'connections' => $this->connectionExtras($keys),
+            default => [],
+        });
     }
 
     public function update(Request $request, string $screen): RedirectResponse
     {
         abort_unless(isset(TxnSettings::SCREENS[$screen]), 404);
 
+        if ($screen === 'connections') {
+            return $this->updateConnections($request);
+        }
+
+        return $this->saveScreen($request, $screen);
+    }
+
+    /**
+     * Connections: saved only when the screen was unlocked ("Edit keys",
+     * confirmed) and the user may edit it. Typed secrets are never kept in
+     * the session when the save fails.
+     */
+    private function updateConnections(Request $request): RedirectResponse
+    {
+        abort_unless(bouncer()->hasPermission('settings.txn.connections.edit'), 403);
+
+        if ($request->input('unlocked') !== '1') {
+            return redirect()->route('admin.settings.txn.connections')
+                ->withErrors(['settings' => ['Click "Edit keys" and confirm before changing anything.']]);
+        }
+
+        try {
+            return $this->saveScreen($request, 'connections');
+        } catch (ValidationException $exception) {
+            $secretInputs = array_map([$this, 'inputName'], array_filter(TxnSettings::keys('connections'), [TxnSettings::class, 'isSecret']));
+
+            return redirect()->route('admin.settings.txn.connections')
+                ->withErrors($exception->errors())
+                ->withInput($request->except(array_merge($secretInputs, ['_token', '_method', 'unlocked'])));
+        }
+    }
+
+    private function saveScreen(Request $request, string $screen): RedirectResponse
+    {
         $userId = auth()->guard('user')->id();
 
         if ($reset = (string) $request->input('reset', '')) {
@@ -70,11 +113,101 @@ class TxnSettingsController extends Controller
             'area' => $this->area($request),
             'follow-ups' => $this->followUps($request),
             'emails' => [$this->emails($request), []],
+            'connections' => $this->connections($request),
         };
 
         $changes = TxnSettings::save($screen, $values, $userId, $errors);
 
         return $this->back($screen, $changes ? "Saved ({$changes} ".($changes === 1 ? 'change' : 'changes').').' : 'Nothing changed.');
+    }
+
+    /**
+     * Test button on the Connections screen: checks one service with the
+     * values on the form (a blank secret = the current one). JSON; never
+     * sends an SMS or email and never returns a secret.
+     */
+    public function testConnection(Request $request): JsonResponse
+    {
+        abort_unless(bouncer()->hasPermission('settings.txn.connections.edit'), 403);
+
+        $test = (string) $request->input('service', '');
+
+        if (! in_array($test, TxnConnectionTester::TESTS, true)) {
+            return response()->json(['ok' => false, 'message' => 'Unknown test.'], 422);
+        }
+
+        if ($request->input('unlocked') !== '1') {
+            return response()->json(['ok' => false, 'message' => 'Click "Edit keys" and confirm first.'], 403);
+        }
+
+        return response()->json((new TxnConnectionTester($this->connectionFormValues($request)))->run($test));
+    }
+
+    /** Form field name of a setting: "sms.auth_token" -> "sms__auth_token". */
+    private function inputName(string $key): string
+    {
+        return str_replace('.', '__', $key);
+    }
+
+    /** The values on the Connections form; a blank secret means "keep the current one". */
+    private function connectionFormValues(Request $request): array
+    {
+        $values = [];
+
+        foreach (TxnSettings::keys('connections') as $key) {
+            $typed = $request->input($this->inputName($key));
+            $values[$key] = TxnSettings::isSecret($key) && trim((string) $typed) === '' ? config($key) : $typed;
+        }
+
+        return $values;
+    }
+
+    /**
+     * Connections save: plain fields as typed, secrets only when something
+     * was typed (blank = keep). The chosen mailer must have its login.
+     */
+    private function connections(Request $request): array
+    {
+        $values = [];
+
+        foreach (TxnSettings::keys('connections') as $key) {
+            $typed = (string) $request->input($this->inputName($key), '');
+
+            if (TxnSettings::isSecret($key) && trim($typed) === '') {
+                continue;
+            }
+
+            $values[$key] = $typed;
+        }
+
+        // Only when the mailer is being changed: the new one must have its login.
+        $current = in_array(config('mail.default'), ['array', 'log'], true) ? TxnSettings::default('mail.default') : config('mail.default');
+
+        if (($values['mail.default'] ?? '') === $current) {
+            return [$values, []];
+        }
+
+        $effective = $this->connectionFormValues($request);
+        $need = [
+            'smtp' => ['mail.mailers.smtp.host', 'mail.mailers.smtp.port', 'mail.mailers.smtp.username', 'mail.mailers.smtp.password'],
+            'graph' => ['graph_mail.tenant_id', 'graph_mail.client_id', 'graph_mail.client_secret'],
+        ][$values['mail.default'] ?? ''] ?? [];
+        $missing = array_filter($need, fn ($key) => trim((string) $effective[$key]) === '');
+        $errors = $missing
+            ? ['Mailer '.TxnSettings::MAILERS[$values['mail.default']].': fill in '.implode(', ', array_map(fn ($key) => TxnSettings::fields()[$key][2], $missing)).' first, or emails would stop.']
+            : [];
+
+        return [$values, $errors];
+    }
+
+    /** Connections screen: cards, field names, and each secret's status (never the value). */
+    private function connectionExtras(array $keys): array
+    {
+        return [
+            'groups' => TxnSettings::CONNECTION_GROUPS,
+            'inputNames' => collect($keys)->mapWithKeys(fn ($key) => [$key => $this->inputName($key)])->all(),
+            'secrets' => collect($keys)->filter([TxnSettings::class, 'isSecret'])->mapWithKeys(fn ($key) => [$key => TxnSettings::secretStatus($key)])->all(),
+        ];
     }
 
     /** Permission key part: "follow-ups" -> "follow_ups". */

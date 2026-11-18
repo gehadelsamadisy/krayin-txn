@@ -2,6 +2,7 @@
 
 namespace Webkul\Admin\Support\Contact;
 
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
@@ -16,8 +17,13 @@ use Throwable;
  * default is not stored. A stored value that fails the checks is ignored
  * (the default applies). Every change goes to txn_settings_log.
  *
- * Not here on purpose: keys and passwords, test mode and allowed recipients,
- * lead database and webhook token, time zone, technical route tuning.
+ * Connections screen: API keys, tokens and logins. Secrets (type "secret")
+ * are stored encrypted with APP_KEY, never sent back to the browser and
+ * never written to the log in full ("ends …a1b2"). A secret that can't be
+ * decrypted (APP_KEY changed) is skipped, so .env applies.
+ *
+ * Not here on purpose: APP_KEY, Krayin's own database and Redis (needed to
+ * start), test mode and allowed recipients, time zone, route tuning.
  */
 final class TxnSettings
 {
@@ -28,7 +34,44 @@ final class TxnSettings
         'area' => ['Service area & scheduling', 'Service area, out-of-area message and the times offered to customers.'],
         'follow-ups' => ['Follow-ups', 'When reminders go out and when an unanswered lead is marked Lost.'],
         'emails' => ['Emails', 'The booking-link, reminder and final emails, part by part.'],
+        'connections' => ['Connections', 'API keys, tokens and logins for Cal.com, Twilio, email sending, Geocodio and the lead database.'],
     ];
+
+    /**
+     * Connections screen cards: group => [title, note, test name or null, keys].
+     * The test name is what TxnConnectionTester runs for the card.
+     */
+    public const CONNECTION_GROUPS = [
+        'calcom' => ['Cal.com', 'Booking links, booking sync and follow-up checks.', 'calcom', [
+            'calcom.api_key',
+        ]],
+        'twilio' => ['Twilio (SMS)', 'Krayin sends texts with these. TXNHome has its own copy in its .env; changing them here does not change TXNHome.', 'twilio', [
+            'sms.account_sid', 'sms.auth_token', 'sms.messaging_service_sid', 'sms.from_number',
+        ]],
+        'mail' => ['Email sending', 'Which service sends Krayin\'s emails, and the sender customers see. A new sender address must be verified in Brevo or Microsoft 365, or mail is refused or lands in spam.', null, [
+            'mail.default', 'mail.from.address', 'mail.from.name',
+        ]],
+        'smtp' => ['Brevo SMTP', 'Used when the mailer above is Brevo SMTP. Port 587 (STARTTLS) or 465 (SSL).', 'smtp', [
+            'mail.mailers.smtp.host', 'mail.mailers.smtp.port', 'mail.mailers.smtp.username', 'mail.mailers.smtp.password',
+        ]],
+        'graph' => ['Microsoft 365', 'Used when the mailer above is Microsoft 365 (app registration with Mail.Send).', 'graph', [
+            'graph_mail.tenant_id', 'graph_mail.client_id', 'graph_mail.client_secret',
+        ]],
+        'geocodio' => ['Geocodio', 'Finds customer addresses on the map for suggested times and routes.', 'geocodio', [
+            'slot_finder.geocodio_api_key',
+        ]],
+        'lead_db' => ['Lead database (TXNHome)', 'Where Krayin reads new Yelp and Angi leads (read-only login). The webhook token must be the same as KRAYIN_WEBHOOK_TOKEN in TXNHome\'s .env, or new leads stop arriving.', 'lead_db', [
+            'lead_triage.lead_db.host', 'lead_triage.lead_db.port', 'lead_triage.lead_db.database', 'lead_triage.lead_db.username', 'lead_triage.lead_db.password', 'lead_triage.webhook_token',
+        ]],
+    ];
+
+    public const MAILERS = ['smtp' => 'Brevo SMTP', 'graph' => 'Microsoft 365'];
+
+    /** Keys put over the config by the last apply()/save(), so the next apply() can undo them. */
+    private static array $appliedKeys = [];
+
+    /** Secrets saved in Krayin that could not be decrypted at the last apply(). */
+    private static array $unreadable = [];
 
     /** Placeholders allowed in the email templates (BookingEmail::vars). */
     public const PLACEHOLDERS = [
@@ -76,7 +119,8 @@ final class TxnSettings
 
     /**
      * Config path => [screen, type, label, options]. Types: text, longtext,
-     * int, color, times, services, lines, area, template.
+     * int, color, times, services, lines, area, template, secret, choice,
+     * email, host, port. Text options: pattern + hint (checked when not empty).
      */
     public static function fields(): array
     {
@@ -105,6 +149,35 @@ final class TxnSettings
             'follow_ups.lost_after_hours' => ['follow-ups', 'int', 'Mark Lost after (hours)', ['min' => 1, 'max' => 2160]],
             'follow_ups.min_hours_before_slot' => ['follow-ups', 'int', 'Only offer times at least this many hours away in the reminder', ['min' => 0, 'max' => 72]],
             'follow_ups.lost_reason' => ['follow-ups', 'text', 'Lost reason', ['required' => true, 'max' => 200]],
+
+            'calcom.api_key' => ['connections', 'secret', 'Cal.com API key', []],
+
+            'sms.account_sid' => ['connections', 'text', 'Twilio Account SID', ['max' => 64, 'pattern' => '/^AC[0-9a-fA-F]{32}$/', 'hint' => 'starts with AC, then 32 letters/digits']],
+            'sms.auth_token' => ['connections', 'secret', 'Twilio Auth token', []],
+            'sms.messaging_service_sid' => ['connections', 'text', 'Twilio Messaging Service SID', ['max' => 64, 'pattern' => '/^MG[0-9a-fA-F]{32}$/', 'hint' => 'starts with MG, then 32 letters/digits']],
+            'sms.from_number' => ['connections', 'text', 'Twilio From number', ['max' => 20, 'pattern' => '/^\+[1-9]\d{6,14}$/', 'hint' => 'international format, e.g. +17135550100']],
+
+            'mail.default' => ['connections', 'choice', 'Mailer', ['choices' => self::MAILERS]],
+            'mail.from.address' => ['connections', 'email', 'Sender address', ['required' => true]],
+            'mail.from.name' => ['connections', 'text', 'Sender name', ['required' => true, 'max' => 100]],
+
+            'mail.mailers.smtp.host' => ['connections', 'host', 'SMTP host', []],
+            'mail.mailers.smtp.port' => ['connections', 'port', 'SMTP port', []],
+            'mail.mailers.smtp.username' => ['connections', 'text', 'SMTP login', ['max' => 200]],
+            'mail.mailers.smtp.password' => ['connections', 'secret', 'SMTP key', []],
+
+            'graph_mail.tenant_id' => ['connections', 'text', 'Microsoft 365 tenant ID', ['max' => 64, 'pattern' => '/^[0-9a-fA-F-]{36}$/', 'hint' => 'a GUID like 1b2c3d4e-...']],
+            'graph_mail.client_id' => ['connections', 'text', 'Microsoft 365 client ID', ['max' => 64, 'pattern' => '/^[0-9a-fA-F-]{36}$/', 'hint' => 'a GUID like 1b2c3d4e-...']],
+            'graph_mail.client_secret' => ['connections', 'secret', 'Microsoft 365 client secret', []],
+
+            'slot_finder.geocodio_api_key' => ['connections', 'secret', 'Geocodio API key', []],
+
+            'lead_triage.lead_db.host' => ['connections', 'host', 'Lead database host', []],
+            'lead_triage.lead_db.port' => ['connections', 'port', 'Lead database port', []],
+            'lead_triage.lead_db.database' => ['connections', 'text', 'Lead database name', ['max' => 64, 'pattern' => '/^[A-Za-z0-9_]+$/', 'hint' => 'letters, digits and _ only']],
+            'lead_triage.lead_db.username' => ['connections', 'text', 'Lead database login', ['max' => 64]],
+            'lead_triage.lead_db.password' => ['connections', 'secret', 'Lead database password', []],
+            'lead_triage.webhook_token' => ['connections', 'secret', 'Webhook token (shared with TXNHome)', ['min' => 16]],
         ];
 
         foreach (self::EMAIL_PARTS as $group => [$title, $parts]) {
@@ -139,27 +212,131 @@ final class TxnSettings
 
             $fields = self::fields();
             self::$defaults ??= collect($fields)->mapWithKeys(fn ($field, $key) => [$key => config($key)])->all();
+            $before = self::connectionSnapshot();
 
-            // Back to the defaults first, so a value reset since the last apply
-            // (long-running queue worker) is gone.
-            foreach (self::$defaults as $key => $value) {
-                config([$key => $value]);
+            // Undo what the last apply/save put over the config, so a value
+            // reset since then (long-running queue worker) is gone. Values set
+            // by someone else (a check script's fake mailer) are left alone.
+            foreach (self::$appliedKeys as $key => $_) {
+                config([$key => self::$defaults[$key] ?? null]);
             }
+            self::$appliedKeys = [];
+            self::$unreadable = [];
 
             foreach (DB::table('txn_settings')->pluck('value', 'key') as $key => $json) {
                 if (! isset($fields[$key])) {
                     continue;
                 }
 
-                [$errors, $clean] = self::check($key, json_decode((string) $json, true));
+                $value = json_decode((string) $json, true);
+
+                if ($fields[$key][1] === 'secret') {
+                    $value = self::decrypt($value);
+
+                    if ($value === null) {
+                        self::$unreadable[$key] = true; // .env applies
+
+                        continue;
+                    }
+                }
+
+                // A test mailer (array/log) set at run time is never replaced.
+                if ($key === 'mail.default' && in_array(config('mail.default'), ['array', 'log'], true)) {
+                    continue;
+                }
+
+                [$errors, $clean] = self::check($key, $value);
 
                 if (! $errors) {
                     config([$key => $clean]);
+                    self::$appliedKeys[$key] = true;
                 }
             }
+
+            self::refreshConnections($before);
         } catch (Throwable) {
             // No database yet: keep the defaults.
         }
+    }
+
+    /** Mail and lead-database config, to see whether apply()/save() changed it. */
+    private static function connectionSnapshot(): string
+    {
+        return serialize([config('mail.default'), config('mail.from'), config('mail.mailers.smtp'), config('graph_mail'), config('lead_triage.lead_db')]);
+    }
+
+    /**
+     * After a change: the next email uses the new mailer and login, and the
+     * lead database connection is set up again with the new login
+     * (AppServiceProvider::register() set it up before the settings were read).
+     */
+    private static function refreshConnections(string $before): void
+    {
+        config(['database.connections.lead_db' => config('lead_triage.lead_db')]);
+
+        if ($before === self::connectionSnapshot()) {
+            return;
+        }
+
+        DB::purge('lead_db');
+
+        if (app()->resolved('mail.manager')) {
+            app('mail.manager')->forgetMailers();
+        }
+
+        // An app token fetched with the old Microsoft 365 login is not reused.
+        \Illuminate\Support\Facades\Cache::forget(\App\Mail\GraphTransport::tokenCacheKey(config('graph_mail.tenant_id'), config('graph_mail.client_id')));
+    }
+
+    private static function encrypt(string $value): string
+    {
+        return Crypt::encryptString($value);
+    }
+
+    /** Decrypted secret, or null when it can't be read (APP_KEY changed, damaged value). */
+    private static function decrypt(mixed $stored): ?string
+    {
+        if (! is_string($stored) || $stored === '') {
+            return null;
+        }
+
+        try {
+            return Crypt::decryptString($stored);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    public static function isSecret(string $key): bool
+    {
+        return (self::fields()[$key][1] ?? null) === 'secret';
+    }
+
+    /** "…a1b2" for a secret: the last 4 characters only (none for short values). */
+    public static function mask(?string $value): string
+    {
+        $value = (string) $value;
+
+        return $value === '' ? '(empty)' : (mb_strlen($value) >= 12 ? 'ends …'.mb_substr($value, -4) : 'set (short)');
+    }
+
+    /**
+     * Where a secret comes from, for the screen: saved (in Krayin), env, none;
+     * plus the masked ending and whether a saved value could not be read.
+     *
+     * @return array{source: string, ends: string, unreadable: bool}
+     */
+    public static function secretStatus(string $key): array
+    {
+        $unreadable = isset(self::$unreadable[$key]);
+        $saved = ! $unreadable && self::isSaved($key);
+        $value = (string) ($saved ? config($key) : self::default($key));
+
+        return [
+            'source' => $saved ? 'saved' : ($value !== '' ? 'env' : 'none'),
+            'ends' => self::mask($value),
+            'unreadable' => $unreadable,
+        ];
     }
 
     public static function default(string $key): mixed
@@ -205,39 +382,50 @@ final class TxnSettings
         }
 
         $changes = 0;
+        $before = self::connectionSnapshot();
 
         DB::transaction(function () use ($clean, $fields, $screen, $userId, &$changes) {
             foreach ($clean as $key => $value) {
-                $old = config($key);
+                $secret = $fields[$key][1] === 'secret';
+                // A test mailer (array/log) set at run time stays in place; the row is still saved.
+                $keepTestMailer = $key === 'mail.default' && in_array(config('mail.default'), ['array', 'log'], true);
+                $old = $keepTestMailer ? self::default($key) : config($key);
                 $new = $value ?? self::default($key);
 
                 if ($new == self::default($key)) {
                     DB::table('txn_settings')->where('key', $key)->delete();
+                    unset(self::$appliedKeys[$key], self::$unreadable[$key]);
                 } else {
                     DB::table('txn_settings')->updateOrInsert(
                         ['key' => $key],
-                        ['value' => json_encode($new), 'updated_by' => $userId, 'updated_at' => now(), 'created_at' => now()]
+                        ['value' => json_encode($secret ? self::encrypt((string) $new) : $new), 'updated_by' => $userId, 'updated_at' => now(), 'created_at' => now()]
                     );
+                    self::$appliedKeys[$key] = true;
+                    unset(self::$unreadable[$key]);
                 }
 
                 if ($old == $new) {
                     continue;
                 }
 
-                config([$key => $new]);
+                if (! $keepTestMailer) {
+                    config([$key => $new]);
+                }
 
                 DB::table('txn_settings_log')->insert([
                     'user_id' => $userId,
                     'area' => "settings:{$screen}",
                     'item' => $fields[$key][2],
-                    'old_value' => self::describe($old),
-                    'new_value' => self::describe($new).($value === null ? ' (default)' : ''),
+                    'old_value' => $secret ? self::mask($old) : self::describe($old),
+                    'new_value' => ($secret ? self::mask($new) : self::describe($new)).($value === null ? ' (default)' : ''),
                     'created_at' => now(),
                 ]);
 
                 $changes++;
             }
         });
+
+        self::refreshConnections($before);
 
         return $changes;
     }
@@ -280,6 +468,71 @@ final class TxnSettings
                 } elseif ($type === 'text' && str_contains($value, "\n")) {
                     $errors[] = "{$label}: one line only.";
                 }
+
+                if ($type === 'text' && $value !== '' && isset($options['pattern']) && ! preg_match($options['pattern'], $value)) {
+                    $errors[] = "{$label}: should be {$options['hint']}.";
+                }
+                break;
+
+            case 'secret':
+                // Never echoes the value in a message.
+                $value = is_scalar($value) ? trim((string) $value) : '';
+
+                if ($value === '' || preg_match('/\s/', $value)) {
+                    $errors[] = "{$label}: can't be empty or contain spaces.";
+                } elseif (mb_strlen($value) > 1000) {
+                    $errors[] = "{$label}: at most 1000 characters.";
+                } elseif (mb_strlen($value) < ($options['min'] ?? 1)) {
+                    $errors[] = "{$label}: at least {$options['min']} characters.";
+                }
+                break;
+
+            case 'choice':
+                $value = is_scalar($value) ? (string) $value : '';
+
+                if (! array_key_exists($value, $options['choices'])) {
+                    $errors[] = "{$label}: choose one of ".implode(', ', $options['choices']).'.';
+                }
+                break;
+
+            case 'email':
+                $value = is_scalar($value) ? trim((string) $value) : '';
+
+                if ($value === '' && ! ($options['required'] ?? false)) {
+                    break;
+                }
+
+                if (! filter_var($value, FILTER_VALIDATE_EMAIL) || mb_strlen($value) > 200) {
+                    $errors[] = "{$label}: must be an email address.";
+                }
+                break;
+
+            case 'host':
+                $value = is_scalar($value) ? mb_strtolower(trim((string) $value)) : '';
+
+                if ($value === '') {
+                    break; // not used (e.g. Brevo while Microsoft 365 sends)
+                }
+
+                if (! filter_var($value, FILTER_VALIDATE_IP) && ! preg_match('/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/', $value)) {
+                    $errors[] = "{$label}: must be a host name like smtp-relay.brevo.com or an IP address.";
+                }
+                break;
+
+            case 'port':
+                if ($value === null || $value === '') {
+                    $value = null; // not used
+
+                    break;
+                }
+
+                if (! is_numeric($value) || (int) $value != $value || $value < 1 || $value > 65535) {
+                    $errors[] = "{$label}: must be a port number (1 to 65535).";
+                    $value = null;
+                    break;
+                }
+
+                $value = (int) $value;
                 break;
 
             case 'int':

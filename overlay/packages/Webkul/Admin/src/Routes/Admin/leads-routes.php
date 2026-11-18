@@ -30,15 +30,19 @@ Route::controller(TxnStageRulesController::class)->prefix('settings/txn/stage-ru
 });
 
 // Settings > TXN Settings: Company & sender, Services, Service area &
-// scheduling, Follow-ups, Emails. One route pair per screen, so each has its
-// own permission (acl.php); the screen is passed to the controller.
-foreach (['company', 'services', 'area', 'follow-ups', 'emails'] as $txnScreen) {
+// scheduling, Follow-ups, Emails, Connections. One route pair per screen, so
+// each has its own permission (acl.php); the screen is passed to the controller.
+foreach (['company', 'services', 'area', 'follow-ups', 'emails', 'connections'] as $txnScreen) {
     $txnName = 'admin.settings.txn.'.str_replace('-', '_', $txnScreen);
 
     Route::get("settings/txn/{$txnScreen}", [TxnSettingsController::class, 'show'])->defaults('screen', $txnScreen)->name($txnName);
 
     Route::put("settings/txn/{$txnScreen}", [TxnSettingsController::class, 'update'])->defaults('screen', $txnScreen)->name("{$txnName}.update");
 }
+
+// Connections: Test buttons (log in only; no SMS or email). Permission
+// settings.txn.connections.edit is checked in the controller.
+Route::post('settings/txn/connections/test', [TxnSettingsController::class, 'testConnection'])->name('admin.settings.txn.connections.test');
 
 Route::controller(LeadController::class)->prefix('leads')->group(function () {
     Route::get('', 'index')->name('admin.leads.index');

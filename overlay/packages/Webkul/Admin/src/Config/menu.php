@@ -349,6 +349,13 @@ return [
         'route' => 'admin.settings.txn.emails',
         'sort' => 6,
         'icon-class' => 'icon-settings-mail',
+    ], [
+        'key' => 'settings.txn.connections',
+        'name' => 'Connections',
+        'info' => 'API keys, tokens and logins (locked until "Edit keys").',
+        'route' => 'admin.settings.txn.connections',
+        'sort' => 7,
+        'icon-class' => 'icon-settings-webhooks',
     ],
 
     /**

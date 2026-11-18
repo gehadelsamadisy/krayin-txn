@@ -653,6 +653,16 @@ return [
         'route' => 'admin.settings.txn.emails.update',
         'sort' => 1,
     ], [
+        'key' => 'settings.txn.connections',
+        'name' => 'Connections',
+        'route' => 'admin.settings.txn.connections',
+        'sort' => 7,
+    ], [
+        'key' => 'settings.txn.connections.edit',
+        'name' => 'admin::app.acl.edit',
+        'route' => 'admin.settings.txn.connections.update',
+        'sort' => 1,
+    ], [
         'key' => 'configuration',
         'name' => 'admin::app.acl.configuration',
         'route' => 'admin.configuration.index',
