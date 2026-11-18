@@ -94,8 +94,7 @@
         @include('admin::contacts.workers.routes-styles')
     @endif
 
-    <!-- TXN: pin the desktop sidebar open (☰ in the header, pin at the bottom of
-         the sidebar). Krayin's hover code only swaps sidebar-collapsed <->
+    <!-- TXN: pin the desktop sidebar open with the ☰ in the header. Krayin's hover code only swaps sidebar-collapsed <->
          sidebar-not-collapsed, so with neither class the sidebar stays open. -->
     <style>
         @media (min-width: 1024px) {
@@ -113,27 +112,10 @@
         .dark .txn-sidebar-toggle:hover { background: #030712; color: #fff; }
         html.dark.txn-sidebar-pinned .txn-sidebar-toggle { color: #38bdf8; }
         @media (max-width: 1023px) { .txn-sidebar-toggle { display: none; } }
-
-        .txn-sidebar-pin { position: absolute; left: 0; right: 0; bottom: 76px; padding: 0 16px; }
-        .txn-sidebar-pin button {
-            display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px;
-            border: 0; border-radius: 8px; background: transparent; cursor: pointer;
-            color: #4b5563; font-weight: 500; white-space: nowrap;
-        }
-        .txn-sidebar-pin button:hover { background: #f3f4f6; }
-        .txn-sidebar-pin svg { flex: 0 0 24px; }
-        .dark .txn-sidebar-pin button { color: #d1d5db; }
-        .dark .txn-sidebar-pin button:hover { background: #030712; }
-        html.txn-sidebar-pinned .txn-sidebar-pin button { color: #0e90d9; }
-        html.dark.txn-sidebar-pinned .txn-sidebar-pin button { color: #38bdf8; }
-        .txn-pin-on, html.txn-sidebar-pinned .txn-pin-off { display: none; }
-        html.txn-sidebar-pinned .txn-pin-on { display: inline; }
     </style>
 
     <script>
-        // fromSidebar: the click came from inside the sidebar (mouse is over it),
-        // so unpinning leaves it open until the mouse leaves, as with hover.
-        window.txnToggleSidebar = function (fromSidebar) {
+        window.txnToggleSidebar = function () {
             var root = document.documentElement;
             var layout = document.getElementById('txn-app-layout');
             var pinned = ! root.classList.contains('txn-sidebar-pinned');
@@ -144,7 +126,7 @@
                 layout.classList.remove('sidebar-collapsed', 'sidebar-not-collapsed');
 
                 if (! pinned) {
-                    layout.classList.add(fromSidebar ? 'sidebar-not-collapsed' : 'sidebar-collapsed');
+                    layout.classList.add('sidebar-collapsed');
                 }
             }
 

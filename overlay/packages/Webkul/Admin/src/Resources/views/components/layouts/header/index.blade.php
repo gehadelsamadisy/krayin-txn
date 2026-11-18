@@ -8,7 +8,7 @@
         <button
             type="button"
             class="txn-sidebar-toggle"
-            onclick="txnToggleSidebar(false)"
+            onclick="txnToggleSidebar()"
             title="Pin or unpin the sidebar (icons + text)"
             aria-label="Pin or unpin the sidebar"
         >
