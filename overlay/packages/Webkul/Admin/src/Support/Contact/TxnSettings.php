@@ -38,31 +38,55 @@ final class TxnSettings
     ];
 
     /**
-     * Connections screen cards: group => [title, note, test name or null, keys].
-     * The test name is what TxnConnectionTester runs for the card.
+     * Connections screen: one card per service, with its keys and its Test.
+     * "test" is what TxnConnectionTester runs. Email has one card with a
+     * mailer switch (mail.default); each mailer brings its own keys and test.
      */
     public const CONNECTION_GROUPS = [
-        'calcom' => ['Cal.com', 'Booking links, booking sync and follow-up checks.', 'calcom', [
-            'calcom.api_key',
-        ]],
-        'twilio' => ['Twilio (SMS)', 'Krayin sends texts with these. TXNHome has its own copy in its .env; changing them here does not change TXNHome.', 'twilio', [
-            'sms.account_sid', 'sms.auth_token', 'sms.messaging_service_sid', 'sms.from_number',
-        ]],
-        'mail' => ['Email sending', 'Which service sends Krayin\'s emails, and the sender customers see. A new sender address must be verified in Brevo or Microsoft 365, or mail is refused or lands in spam.', null, [
-            'mail.default', 'mail.from.address', 'mail.from.name',
-        ]],
-        'smtp' => ['Brevo SMTP', 'Used when the mailer above is Brevo SMTP. Port 587 (STARTTLS) or 465 (SSL).', 'smtp', [
-            'mail.mailers.smtp.host', 'mail.mailers.smtp.port', 'mail.mailers.smtp.username', 'mail.mailers.smtp.password',
-        ]],
-        'graph' => ['Microsoft 365', 'Used when the mailer above is Microsoft 365 (app registration with Mail.Send).', 'graph', [
-            'graph_mail.tenant_id', 'graph_mail.client_id', 'graph_mail.client_secret',
-        ]],
-        'geocodio' => ['Geocodio', 'Finds customer addresses on the map for suggested times and routes.', 'geocodio', [
-            'slot_finder.geocodio_api_key',
-        ]],
-        'lead_db' => ['Lead database (TXNHome)', 'Where Krayin reads new Yelp and Angi leads (read-only login). The webhook token must be the same as KRAYIN_WEBHOOK_TOKEN in TXNHome\'s .env, or new leads stop arriving.', 'lead_db', [
-            'lead_triage.lead_db.host', 'lead_triage.lead_db.port', 'lead_triage.lead_db.database', 'lead_triage.lead_db.username', 'lead_triage.lead_db.password', 'lead_triage.webhook_token',
-        ]],
+        'calcom' => [
+            'title' => 'Cal.com',
+            'mark' => 'Ca',
+            'purpose' => 'Booking links, booking sync and follow-up checks.',
+            'note' => null,
+            'test' => 'calcom',
+            'keys' => ['calcom.api_key'],
+        ],
+        'twilio' => [
+            'title' => 'Twilio',
+            'mark' => 'Tw',
+            'purpose' => 'Sends the booking-link texts.',
+            'note' => 'TXNHome keeps its own copy in its .env. Changing these here does not change TXNHome.',
+            'test' => 'twilio',
+            'keys' => ['sms.account_sid', 'sms.auth_token', 'sms.messaging_service_sid', 'sms.from_number'],
+        ],
+        'email' => [
+            'title' => 'Email sending',
+            'mark' => '@',
+            'purpose' => 'Sends booking-link, reminder and final emails, from the sender below.',
+            'note' => 'A new sender address must be verified with the mail service, or emails are refused or land in spam.',
+            'test' => null,
+            'keys' => ['mail.from.address', 'mail.from.name'],
+            'mailers' => [
+                'smtp' => ['test' => 'smtp', 'hint' => 'Port 587 uses STARTTLS, 465 uses SSL.', 'keys' => ['mail.mailers.smtp.host', 'mail.mailers.smtp.port', 'mail.mailers.smtp.username', 'mail.mailers.smtp.password']],
+                'graph' => ['test' => 'graph', 'hint' => 'An Entra app registration with the Mail.Send permission.', 'keys' => ['graph_mail.tenant_id', 'graph_mail.client_id', 'graph_mail.client_secret']],
+            ],
+        ],
+        'geocodio' => [
+            'title' => 'Geocodio',
+            'mark' => 'Ge',
+            'purpose' => 'Finds customer addresses on the map for suggested times and routes.',
+            'note' => null,
+            'test' => 'geocodio',
+            'keys' => ['slot_finder.geocodio_api_key'],
+        ],
+        'lead_db' => [
+            'title' => 'Lead database',
+            'mark' => 'DB',
+            'purpose' => 'Where Krayin reads new Yelp and Angi leads from TXNHome (read-only login).',
+            'note' => 'The webhook token must match KRAYIN_WEBHOOK_TOKEN in TXNHome\'s .env, or new leads stop arriving.',
+            'test' => 'lead_db',
+            'keys' => ['lead_triage.lead_db.host', 'lead_triage.lead_db.port', 'lead_triage.lead_db.database', 'lead_triage.lead_db.username', 'lead_triage.lead_db.password', 'lead_triage.webhook_token'],
+        ],
     ];
 
     public const MAILERS = ['smtp' => 'Brevo SMTP', 'graph' => 'Microsoft 365'];
