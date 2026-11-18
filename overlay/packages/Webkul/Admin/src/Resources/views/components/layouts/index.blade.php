@@ -1,7 +1,13 @@
 <!DOCTYPE html>
 
+@php
+    // TXN: sidebar pinned open (icons + text). Set by txnToggleSidebar() below in a
+    // plain browser cookie, so it is read raw (Laravel's cookies are encrypted).
+    $txnSidebarPinned = ($_COOKIE['txn_sidebar_pinned'] ?? '') === '1';
+@endphp
+
 <html
-    class="{{ request()->cookie('dark_mode') ? 'dark' : '' }}"
+    class="{{ request()->cookie('dark_mode') ? 'dark' : '' }} {{ $txnSidebarPinned ? 'txn-sidebar-pinned' : '' }}"
     lang="{{ app()->getLocale() }}"
     dir="{{ in_array(app()->getLocale(), ['fa', 'ar']) ? 'rtl' : 'ltr' }}"
 >
@@ -88,6 +94,65 @@
         @include('admin::contacts.workers.routes-styles')
     @endif
 
+    <!-- TXN: pin the desktop sidebar open (☰ in the header, pin at the bottom of
+         the sidebar). Krayin's hover code only swaps sidebar-collapsed <->
+         sidebar-not-collapsed, so with neither class the sidebar stays open. -->
+    <style>
+        @media (min-width: 1024px) {
+            html.txn-sidebar-pinned[dir="ltr"] .txn-page-content { padding-left: 216px; }
+            html.txn-sidebar-pinned[dir="rtl"] .txn-page-content { padding-right: 216px; }
+        }
+        .txn-sidebar-toggle {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 36px; height: 36px; border: 0; border-radius: 6px;
+            background: transparent; color: #4b5563; cursor: pointer;
+        }
+        .txn-sidebar-toggle:hover { background: #f3f4f6; color: #111827; }
+        html.txn-sidebar-pinned .txn-sidebar-toggle { color: #0e90d9; }
+        .dark .txn-sidebar-toggle { color: #d1d5db; }
+        .dark .txn-sidebar-toggle:hover { background: #030712; color: #fff; }
+        html.dark.txn-sidebar-pinned .txn-sidebar-toggle { color: #38bdf8; }
+        @media (max-width: 1023px) { .txn-sidebar-toggle { display: none; } }
+
+        .txn-sidebar-pin { position: absolute; left: 0; right: 0; bottom: 76px; padding: 0 16px; }
+        .txn-sidebar-pin button {
+            display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px;
+            border: 0; border-radius: 8px; background: transparent; cursor: pointer;
+            color: #4b5563; font-weight: 500; white-space: nowrap;
+        }
+        .txn-sidebar-pin button:hover { background: #f3f4f6; }
+        .txn-sidebar-pin svg { flex: 0 0 24px; }
+        .dark .txn-sidebar-pin button { color: #d1d5db; }
+        .dark .txn-sidebar-pin button:hover { background: #030712; }
+        html.txn-sidebar-pinned .txn-sidebar-pin button { color: #0e90d9; }
+        html.dark.txn-sidebar-pinned .txn-sidebar-pin button { color: #38bdf8; }
+        .txn-pin-on, html.txn-sidebar-pinned .txn-pin-off { display: none; }
+        html.txn-sidebar-pinned .txn-pin-on { display: inline; }
+    </style>
+
+    <script>
+        // fromSidebar: the click came from inside the sidebar (mouse is over it),
+        // so unpinning leaves it open until the mouse leaves, as with hover.
+        window.txnToggleSidebar = function (fromSidebar) {
+            var root = document.documentElement;
+            var layout = document.getElementById('txn-app-layout');
+            var pinned = ! root.classList.contains('txn-sidebar-pinned');
+
+            root.classList.toggle('txn-sidebar-pinned', pinned);
+
+            if (layout) {
+                layout.classList.remove('sidebar-collapsed', 'sidebar-not-collapsed');
+
+                if (! pinned) {
+                    layout.classList.add(fromSidebar ? 'sidebar-not-collapsed' : 'sidebar-collapsed');
+                }
+            }
+
+            document.cookie = 'txn_sidebar_pinned=' + (pinned ? '1' : '0')
+                + '; path=/; max-age=' + (pinned ? 31536000 : 0) + '; SameSite=Lax';
+        };
+    </script>
+
     @stack('styles')
 
     <style>
@@ -120,7 +185,8 @@
         <x-admin::layouts.header />
 
         <div
-            class="group/container sidebar-collapsed flex gap-4"
+            class="group/container {{ $txnSidebarPinned ? '' : 'sidebar-collapsed' }} flex gap-4"
+            id="txn-app-layout"
             ref="appLayout"
         >
             <!-- Page Sidebar Blade Component -->
@@ -128,7 +194,7 @@
 
             <div class="flex min-h-[calc(100vh-62px)] max-w-full flex-1 flex-col bg-gray-100 pt-3 transition-all duration-300 dark:bg-gray-950">
                 <!-- Page Content Blade Component -->
-                <div class="px-4 pb-6 ltr:lg:pl-[85px] rtl:lg:pr-[85px]">
+                <div class="txn-page-content px-4 pb-6 ltr:lg:pl-[85px] rtl:lg:pr-[85px]">
                     {{ $slot }}
                 </div>
 

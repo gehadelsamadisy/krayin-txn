@@ -3,7 +3,20 @@
     <div class="flex items-center gap-1.5">
         <!-- Sidebar Menu -->
         <x-admin::layouts.sidebar.mobile />
-        
+
+        <!-- TXN: pin / unpin the desktop sidebar (txnToggleSidebar in layouts/index). -->
+        <button
+            type="button"
+            class="txn-sidebar-toggle"
+            onclick="txnToggleSidebar(false)"
+            title="Pin or unpin the sidebar (icons + text)"
+            aria-label="Pin or unpin the sidebar"
+        >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <path d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+        </button>
+
         <a href="{{ route('admin.dashboard.index') }}">
             @if ($logo = core()->getConfigData('general.general.admin_logo.logo_image'))
                 <img
