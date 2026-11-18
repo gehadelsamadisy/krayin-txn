@@ -9,7 +9,7 @@
 # 2. starts a test container on the copy with email, SMS, Cal.com and
 #    Geocodio switched off;
 # 3. shows the leads per stage, runs the pending migrations, shows them again;
-# 4. runs tests/pipeline-check.php and tests/settings-check.php (rolled back, nothing kept);
+# 4. runs tests/pipeline-check.php, settings-check.php and kanban-sort-check.php (rolled back, nothing kept);
 # 5. undoes the migrations it ran and checks every lead is back in exactly
 #    the stage it started in, and the stages are as before;
 # 6. removes the test container and the scratch database.
@@ -89,7 +89,7 @@ ok=1
 [ "$COUNT_AFTER" = "$COUNT_BEFORE" ] || { echo "  FAIL: $COUNT_BEFORE leads before, $COUNT_AFTER after"; ok=0; }
 
 docker exec "$C" mkdir -p /var/www/laravel-crm/tests
-for t in pipeline-check settings-check; do
+for t in pipeline-check settings-check kanban-sort-check; do
     log "Running tests/$t.php"
     docker cp "tests/$t.php" "$C:/var/www/laravel-crm/tests/$t.php"
     docker exec -u www-data -e HOME=/tmp "$C" php "tests/$t.php" || ok=0
