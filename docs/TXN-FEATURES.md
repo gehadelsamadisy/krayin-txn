@@ -91,6 +91,62 @@ changes. After copying changed files into the container, run
 `php artisan optimize:clear` from `/var/www/laravel-crm`; alternatively, build
 and run an image that includes or mounts these customizations.
 
+## Automation engines and the event log
+
+Pipeline: lead arrives (TXNHome webhook) → lead check → booking link →
+customer books → booking in Krayin → follow-ups. The first two are
+automatic; the rest can be automated with **engines**, all **off** as shipped
+(`config/automation.php`), switched in **Settings > TXN Settings >
+Automation** (permission `settings.txn.automation`):
+
+| Engine | What it does when on |
+| --- | --- |
+| Master switch | Off = no engine does anything (staff buttons still work) |
+| Email engine | A **new** lead that passes the check (optionally also a Needs Review lead that gets fixed), in a chosen flow (default Standard), gets its booking link automatically: best times suggested, Cal.com link created, email, lead → Contacted, follow-ups started. Never twice for a lead. Reminder / final email / mark Lost each on or off |
+| SMS engine | Texts the automatic booking link; reminder text (template on Emails) |
+| Staff notifications | Plain email to listed staff: lead needs review, out of area, no times found, automatic send failed/blocked, booking cancelled |
+| Cal.com webhook (own switch) | `POST /txn/calcom-webhook`: bookings, reschedules and cancellations saved at once |
+| Clock | `php artisan txn:automation-tick`, scheduled every 15 minutes: sends due follow-ups as the switches allow |
+
+The Safety guards apply to everything: `BookingLinkGuard` (Cal.com guard)
+is checked inside `CalcomBookingLinkService::createBookingLink`, so no path
+can get around it. Staff edits never send a link by themselves.
+
+Code: `Support\Automation\{Automation, EmailEngine, StaffNotifier}`,
+`Support\Contact\BookingLinkSender` (shared by the booking-link page and
+automation: `createLink`, `deliver`, `sendAutomatic`), events
+`txn.lead.checked` (LeadTriageService::check) and `txn.booking.changed`
+(CalcomBookingSyncService::upsert), `Http\Controllers\Contact\CalcomWebhookController`.
+
+**Turning it on (when you decide):**
+
+1. Clock: in the server `.env` set `KRAYIN_SCHEDULER=true`, then
+   `./scripts/deploy.sh` (starts the `krayin-scheduler` container). Without
+   it, follow-ups only go out with `php artisan txn:follow-ups`.
+2. Cal.com webhook: Krayin must be reachable from the internet over HTTPS.
+   In Cal.com: Settings > Developer > Webhooks > New: Subscriber URL
+   `https://<krayin>/txn/calcom-webhook`, events Booking Created / Rescheduled /
+   Cancelled, a long random secret. Type the same secret on the Automation
+   screen and switch the webhook on. A request without the right
+   `X-Cal-Signature-256` (HMAC-SHA256 of the body) gets 401; with the webhook
+   off, 404. The booking is re-read from the Cal.com API by uid and saved with
+   the same `upsert` as the Sync button (which stays as the backup).
+3. Engines: switch the master switch and each engine on, on the Automation screen.
+
+**Event log** (`txn_events`, `Support\Contact\PipelineEvents`): every step,
+by staff or automation, one readable line with who did it (staff name,
+"Automation", "TXNHome webhook", "Cal.com webhook", "Scheduler", "Command"):
+leads imported (counts) and checked (summary + one line per lead), times
+suggested, link created (times and workers), link sent (email/SMS outcome),
+not sent / blocked / failed (with the reason), reminder, final email, fresh
+link, follow-ups stopped, marked Lost, booking received / rescheduled /
+cancelled (time and worker), syncs, engine switched, staff notified.
+Shown at **Leads > Event log** (button on the leads list; permission
+`leads.event_log`): totals for the dates, filters, timeline, CSV export; and
+in an **Events** card on each lead and contact. Kept forever.
+
+Check: `tests/automation-check.php` (run by `scripts/test-on-copy.sh`).
+
 ## Email while testing: one allowed recipient
 
 `app/Providers/AppServiceProvider.php` stops every email whose recipients
