@@ -62,6 +62,9 @@ class LeadTriageController extends Controller
         $checked = $ready + $review;
         $message = "Checked {$checked} new leads: {$ready} ready for a booking link, {$review} need review.";
 
+        \Webkul\Admin\Support\Contact\PipelineEvents::record('leads_checked', "Checked {$checked} ".($checked === 1 ? 'lead' : 'leads').": {$ready} ready, {$review} need review"
+            .($left ? ", {$left} left for later" : ''), ['checked' => $checked, 'ready' => $ready, 'review' => $review, 'check_left' => $left]);
+
         return back()->with('success', $left ? "{$message} {$left} left: press Check new leads again." : $message);
     }
 

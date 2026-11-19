@@ -238,6 +238,12 @@ class PersonController extends Controller
             return response()->json(['status' => 'ERROR', 'message' => $exception->getMessage()], 422);
         }
 
+        // Not for a test address or a pretend "now": those are trials, not real suggestions.
+        if (($result['status'] ?? null) === SlotSuggestionService::OK && empty($validated['address']) && empty($validated['now'])) {
+            $times = collect($result['options'] ?? [])->mapWithKeys(fn ($option) => [$option['value'] => (int) $option['worker_id']])->all();
+            \Webkul\Admin\Support\Contact\PipelineEvents::record('times_suggested', 'Suggested '.\Webkul\Admin\Support\Contact\PipelineEvents::slotsText($times, $timezone).' for '.\Webkul\Admin\Support\Contact\PipelineEvents::name($person), ['times' => $times, 'timezone' => $timezone], null, $person);
+        }
+
         return response()->json($result + ['now' => $now->format('D M j, g:i A'), 'timezone' => $timezone]);
     }
 

@@ -68,7 +68,7 @@
                 @endforeach
 
                 <section class="tc-card is-plain">
-                    @include('admin::settings.txn.partials.card-head', ['icon' => 'message', 'title' => 'Text message (SMS) with the booking link', 'text' => 'Sent with the booking-link email when the customer has a phone number.'])
+                    @include('admin::settings.txn.partials.card-head', ['icon' => 'message', 'title' => 'Text messages (SMS)', 'text' => 'Sent with the booking-link email when the customer has a phone number.'])
                     <div class="tc-body">
                         <div class="tc-chips">
                             @foreach ($smsPlaceholders as $name => $meaning)
@@ -87,6 +87,15 @@
                                 <span class="tc-meter" id="sms-meter"><i></i></span>
                                 <span id="sms-count"></span>
                             </div>
+                        </div>
+
+                        @php
+                            $reminderKey = 'sms.templates.reminder';
+                        @endphp
+                        <div class="tc-field" style="padding-top: 14px; border-top: 1px dashed var(--tc-line);">
+                            <label for="f-sms-reminder" class="tc-label">{{ $fields[$reminderKey][2] }} <span class="tc-sublabel">(with the 24h reminder, only when the SMS engine's reminder text is on)</span></label>
+                            <textarea id="f-sms-reminder" name="sms_reminder" rows="2" maxlength="{{ $fields[$reminderKey][3]['max'] }}" class="tc-input" @disabled(! $canEdit)>{{ old('sms_reminder', $values[$reminderKey]) }}</textarea>
+                            @include('admin::settings.txn.partials.field-meta', ['key' => $reminderKey, 'defaultText' => (string) $defaults[$reminderKey]])
                         </div>
                     </div>
                 </section>

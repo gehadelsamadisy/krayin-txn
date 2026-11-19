@@ -59,6 +59,10 @@ class AppServiceProvider extends ServiceProvider
         Event::listen('admin.leads.index.header.right.before', fn ($view) => $view->addTemplate('admin::leads.triage-new-button'));
         Event::listen('admin.leads.index.header.after', fn ($view) => $view->addTemplate('admin::leads.import-result'));
 
+        // Pipeline events of this lead / contact (PipelineEvents, Leads > Event log).
+        Event::listen('admin.leads.view.activities.after', fn ($view) => $view->addTemplate('admin::leads.events-card'));
+        Event::listen('admin.contact.persons.view.right.after', fn ($view) => $view->addTemplate('admin::leads.events-card'));
+
         // Re-run the lead check when the contact or lead is edited, so
         // "Missing Info" etc. follow the new phone/address. Lead edits count
         // only from the edit form and the inline fields: a stage change must

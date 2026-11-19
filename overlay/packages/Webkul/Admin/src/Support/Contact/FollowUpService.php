@@ -33,8 +33,16 @@ final class FollowUpService
         private BookingEmail $email,
         private LeadStageService $stages,
         private SlotSuggestionService $slots,
-        private CalcomBookingLinkService $links
+        private CalcomBookingLinkService $links,
+        private SmsSender $sms
     ) {}
+
+    /**
+     * Which steps may run. Null (the command, by hand): every email step,
+     * no text, as before. Automation passes the engines' switches
+     * (Support\Automation\Automation::followUpGates()).
+     */
+    private array $allow = ['reminder' => true, 'final' => true, 'lost' => true, 'sms_reminder' => false];
 
     /** A booking link was emailed: start its sequence; older open ones for the same lead/person stop. */
     public function start(Person $person, $lead, string $email, string $url): void
@@ -64,10 +72,11 @@ final class FollowUpService
      *
      * @return array<int, array{id: int, lead: string, contact: string, action: string, result: string}>
      */
-    public function run(bool $dryRun = false, ?CarbonImmutable $now = null): array
+    public function run(bool $dryRun = false, ?CarbonImmutable $now = null, ?array $allow = null): array
     {
         $now ??= CarbonImmutable::now();
         $report = [];
+        $this->allow = array_merge(['reminder' => true, 'final' => true, 'lost' => true, 'sms_reminder' => false], $allow ?? []);
 
         foreach (DB::table('txn_follow_ups')->whereNull('stopped_at')->whereNull('lost_at')->orderBy('id')->get() as $row) {
             try {
@@ -91,10 +100,12 @@ final class FollowUpService
         }
 
         $hours = CarbonImmutable::parse($row->link_sent_at)->diffInMinutes($now) / 60;
+        // A step turned off (Automation) is passed over: with the final email
+        // off, Lost still comes at its hour.
         $action = match (true) {
-            $row->final_sent_at && $hours >= config('follow_ups.lost_after_hours') => 'lost',
-            ! $row->final_sent_at && $hours >= config('follow_ups.final_after_hours') => 'final',
-            ! $row->reminder_sent_at && ! $row->final_sent_at && $hours >= config('follow_ups.reminder_after_hours') => 'reminder',
+            ($row->final_sent_at || ! $this->allow['final']) && $this->allow['lost'] && $hours >= config('follow_ups.lost_after_hours') => 'lost',
+            ! $row->final_sent_at && $this->allow['final'] && $hours >= config('follow_ups.final_after_hours') => 'final',
+            ! $row->reminder_sent_at && ! $row->final_sent_at && $this->allow['reminder'] && $hours >= config('follow_ups.reminder_after_hours') => 'reminder',
             default => null,
         };
 
@@ -150,7 +161,26 @@ final class FollowUpService
         DB::table('txn_follow_ups')->where('id', $row->id)->update(['reminder_sent_at' => now(), 'updated_at' => now()]);
         $this->note($person, $leads, 'Follow-up 1 (24h) emailed', "Sent to {$row->email}: {$how}.".($slots ? "\n{$url}" : ''));
 
-        return $this->line($row, $person, $leads, 'reminder', "emailed {$row->email} ({$how})");
+        // Reminder text (SMS engine): only with a link to book from.
+        $sms = $this->allow['sms_reminder'] && $slots
+            ? $this->sms->send($person, $this->email->smsText($person, $lead, $url, 'reminder'), $lead)
+            : null;
+        $smsText = match ($sms['status'] ?? null) {
+            'sent' => ' and SMS ('.$sms['to'].')',
+            'blocked' => '; SMS blocked by the guard',
+            'skipped' => '; no SMS (no usable phone number)',
+            'failed' => '; SMS failed',
+            default => '',
+        };
+
+        PipelineEvents::record('reminder_sent', 'Sent the reminder to '.PipelineEvents::name($person)." by email ({$row->email}){$smsText}: {$how}", [
+            'email' => $row->email,
+            'times' => $slots,
+            'url' => $slots ? $url : null,
+            'sms' => $sms ? array_intersect_key($sms, array_flip(['status', 'to', 'error'])) : null,
+        ], $lead, $person);
+
+        return $this->line($row, $person, $leads, 'reminder', "emailed {$row->email} ({$how})".$smsText);
     }
 
     /** @return array{0: string, 1: array, 2: string} [url, slots, description] */
@@ -173,6 +203,11 @@ final class FollowUpService
                 'updated_at' => now(),
             ]);
 
+            PipelineEvents::record('fresh_link_created', 'No times left in the sent link: created a fresh one for '.PipelineEvents::name($person).' with '.PipelineEvents::slotsText($slotWorkers, $timezone), [
+                'url' => $url,
+                'times' => $slotWorkers,
+            ], $leads->first() ?? $row->lead_id, $person);
+
             return [$url, array_keys($slotWorkers), count($slotWorkers).' new time(s) in a fresh link'];
         } catch (Throwable $exception) {
             Log::warning('Follow-up could not create a fresh booking link.', ['follow_up_id' => $row->id, 'error' => $exception->getMessage()]);
@@ -190,6 +225,7 @@ final class FollowUpService
         $this->email->send('final', $row->email, $this->email->data($person, $leads->first(), config('slot_finder.timezone'), [], null, 'final'));
         DB::table('txn_follow_ups')->where('id', $row->id)->update(['final_sent_at' => now(), 'updated_at' => now()]);
         $this->note($person, $leads, 'Final follow-up (72h) emailed', "Sent to {$row->email}.");
+        PipelineEvents::record('final_sent', 'Sent the final email to '.PipelineEvents::name($person)." ({$row->email})", ['email' => $row->email], $leads->first(), $person);
 
         return $this->line($row, $person, $leads, 'final', "emailed {$row->email}");
     }
@@ -203,6 +239,10 @@ final class FollowUpService
         $moved = $leads->filter(fn ($lead) => $this->stages->lost($lead, config('follow_ups.lost_reason')))->count();
         DB::table('txn_follow_ups')->where('id', $row->id)->update(['lost_at' => now(), 'updated_at' => now()]);
 
+        foreach ($leads as $lead) {
+            PipelineEvents::record('marked_lost', 'Marked '.($lead->title ?: "lead {$lead->id}").' Lost: '.config('follow_ups.lost_reason'), ['reason' => config('follow_ups.lost_reason')], $lead, $person);
+        }
+
         return $this->line($row, $person, $leads, 'lost', "{$moved} lead(s) marked Lost");
     }
 
@@ -210,6 +250,7 @@ final class FollowUpService
     {
         if (! $dryRun) {
             DB::table('txn_follow_ups')->where('id', $row->id)->update(['stopped_at' => now(), 'stop_reason' => $reason, 'updated_at' => now()]);
+            PipelineEvents::record('follow_up_stopped', 'Stopped the follow-ups for '.PipelineEvents::name($person).": {$reason}", ['reason' => $reason], $row->lead_id, $person ?? $row->person_id);
         }
 
         return $this->line($row, $person, $leads, 'stop', ($dryRun ? 'would stop: ' : 'stopped: ').$reason);

@@ -97,7 +97,7 @@ class LeadCsvImportService
                 $result[$status]++;
 
                 if ($status !== 'unchanged') {
-                    $touched[] = $leadId;
+                    $touched[$leadId] = $status === 'created';
                 }
             }
         } catch (Throwable $exception) {
@@ -115,11 +115,23 @@ class LeadCsvImportService
         DB::commit();
 
         // After the commit: a failed map lookup must not undo the import.
-        // Stops at the time budget so the request ends before the server's
-        // 300 s limit; the rest stays in Raw Lead for "Check new leads".
+        $this->checkTouched($touched, $started, $result, 'Lead import');
+        $this->recordImport($result, 'a CSV file');
+
+        return $result;
+    }
+
+    /**
+     * Lead check for the new and changed leads ($touched: lead id => is new).
+     * Stops at the time budget so the request ends before the server's 300 s
+     * limit; the rest stays in Raw Lead for "Check new leads". A new lead
+     * that passes can be sent its booking link by automation (EmailEngine).
+     */
+    private function checkTouched(array $touched, float $started, array &$result, string $logLabel): void
+    {
         $deadline = $started + config('lead_triage.import.check_seconds', 200);
 
-        foreach ($touched as $leadId) {
+        foreach ($touched as $leadId => $isNew) {
             if (microtime(true) >= $deadline) {
                 $result['check_left']++;
 
@@ -127,15 +139,34 @@ class LeadCsvImportService
             }
 
             try {
-                $this->triage->check(Lead::findOrFail($leadId))['review'] && $result['review']++;
+                $this->triage->check(Lead::findOrFail($leadId), (bool) $isNew)['review'] && $result['review']++;
                 $result['checked']++;
             } catch (Throwable $exception) {
                 $result['check_failed']++;
-                Log::warning("Lead import: lead check failed for lead {$leadId}.", ['error' => $exception->getMessage()]);
+                Log::warning("{$logLabel}: lead check failed for lead {$leadId}.", ['error' => $exception->getMessage()]);
             }
         }
+    }
 
-        return $result;
+    /** "Imported 2 new and 1 changed leads from the lead database; checked 3: 1 needs review". */
+    private function recordImport(array $result, string $from): void
+    {
+        if ($result['dry_run'] ?? false) {
+            return;
+        }
+
+        $summary = "Imported {$result['created']} new and {$result['updated']} changed ".($result['created'] + $result['updated'] === 1 ? 'lead' : 'leads')." from {$from}"
+            .($result['unchanged'] ? " ({$result['unchanged']} unchanged)" : '')
+            .(($result['skipped'] ?? 0) ? ", {$result['skipped']} skipped" : '');
+
+        PipelineEvents::record('leads_imported', $summary, array_intersect_key($result, array_flip(['rows', 'created', 'updated', 'unchanged', 'skipped', 'duplicates', 'errors'])));
+
+        if ($result['checked'] || $result['check_left'] || $result['check_failed']) {
+            $ready = $result['checked'] - $result['review'];
+            PipelineEvents::record('leads_checked', "Checked {$result['checked']} ".($result['checked'] === 1 ? 'lead' : 'leads').": {$ready} ready, {$result['review']} need review"
+                .($result['check_left'] ? ", {$result['check_left']} left for later" : '')
+                .($result['check_failed'] ? ", {$result['check_failed']} failed" : ''), array_intersect_key($result, array_flip(['checked', 'review', 'check_left', 'check_failed'])));
+        }
     }
 
     /**
@@ -186,28 +217,13 @@ class LeadCsvImportService
             $result[$status]++;
 
             if ($status !== 'unchanged' && ! $dryRun) {
-                $touched[] = $leadId;
+                $touched[$leadId] = $status === 'created';
             }
         }
 
         // Same lead check and time budget as import().
-        $deadline = $started + config('lead_triage.import.check_seconds', 200);
-
-        foreach ($touched as $leadId) {
-            if (microtime(true) >= $deadline) {
-                $result['check_left']++;
-
-                continue;
-            }
-
-            try {
-                $this->triage->check(Lead::findOrFail($leadId))['review'] && $result['review']++;
-                $result['checked']++;
-            } catch (Throwable $exception) {
-                $result['check_failed']++;
-                Log::warning("Lead DB import: lead check failed for lead {$leadId}.", ['error' => $exception->getMessage()]);
-            }
-        }
+        $this->checkTouched($touched, $started, $result, 'Lead DB import');
+        $this->recordImport($result, 'the lead database');
 
         return $result;
     }

@@ -384,5 +384,31 @@
     .tc-role { padding: 12px 14px; border: 1px solid var(--tc-line); border-radius: 10px; background: var(--tc-band); font-size: 13px; line-height: 1.45; }
     .tc-role strong { display: block; margin-bottom: 2px; }
     @media (max-width: 720px) { .tc-roles { grid-template-columns: 1fr; } }
+
+    /* Pipeline event log (Leads > Event log, Events card) */
+    .tc-filters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) auto; gap: 10px; align-items: end; }
+    @media (max-width: 900px) { .tc-filters { grid-template-columns: 1fr 1fr; } }
+    .tc-statgrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+    @media (max-width: 900px) { .tc-statgrid { grid-template-columns: 1fr 1fr; } }
+    .tc-statcard { padding: 14px 16px; border: 1px solid var(--tc-line); border-radius: 12px; background: var(--tc-panel); }
+    .tc-statcard b { display: block; font-size: 24px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .tc-statcard span { color: var(--tc-muted); font-size: 12px; font-weight: 600; }
+    .tc-events { margin: 0; padding: 0; list-style: none; }
+    .tc-event { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; padding: 0 0 14px; }
+    .tc-event::before { content: ""; position: absolute; left: 14px; top: 30px; bottom: 0; width: 2px; background: var(--tc-line); }
+    .tc-event:last-child { padding-bottom: 0; }
+    .tc-event:last-child::before { display: none; }
+    .tc-event-icon { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--tc-brand-soft); color: var(--tc-brand); }
+    .tc-event.is-ok .tc-event-icon { background: var(--tc-ok-soft); color: var(--tc-ok); }
+    .tc-event.is-warn .tc-event-icon { background: var(--tc-warn-soft); color: var(--tc-warn); }
+    .tc-event.is-bad .tc-event-icon { background: var(--tc-bad-soft); color: var(--tc-bad); }
+    .tc-event-body { min-width: 0; padding-top: 4px; }
+    .tc-event-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+    .tc-event-type { font-size: 12px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--tc-muted); }
+    .tc-event-when { font-size: 12px; color: var(--tc-muted); font-variant-numeric: tabular-nums; }
+    .tc-event-summary { margin: 3px 0 0; font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; }
+    .tc-event-links { display: flex; flex-wrap: wrap; gap: 10px; margin: 3px 0 0; font-size: 12px; }
+    .tc-event-links a { color: var(--tc-brand); font-weight: 600; text-decoration: none; }
+    .tc-event-links a:hover { text-decoration: underline; }
 </style>
 @endPushOnce

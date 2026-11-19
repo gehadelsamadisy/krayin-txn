@@ -118,11 +118,11 @@ final class BookingEmail
     }
 
     /** The booking-link text message for $person (template sms.templates.booking_link). */
-    public function smsText(Person $person, $lead, string $url): string
+    public function smsText(Person $person, $lead, string $url, string $template = 'booking_link'): string
     {
         $firstName = strtok(trim((string) $person->name), ' ') ?: 'there';
         $service = mb_strtolower($this->serviceCategory($lead) ?? $this->serviceName($lead) ?? 'home');
-        $text = trim(self::fill(config('sms.templates.booking_link'), $this->smsVars($firstName, $service, $url)));
+        $text = trim(self::fill(config("sms.templates.{$template}") ?: config('sms.templates.booking_link'), $this->smsVars($firstName, $service, $url)));
 
         // The link must always reach the customer, whatever the wording.
         return str_contains($text, $url) ? $text : trim("{$text} {$url}");

@@ -370,7 +370,7 @@ try {
         config(['sms.signature' => 'TXN Home Services']);
 
         $emailsPage = $call('GET', route('admin.settings.txn.emails', [], false));
-        $check('Emails page shows the text message with its preview', str_contains($emailsPage->getContent(), 'id="sms-preview"') && str_contains($emailsPage->getContent(), 'Text message (SMS)'));
+        $check('Emails page shows the text message with its preview', str_contains($emailsPage->getContent(), 'id="sms-preview"') && str_contains($emailsPage->getContent(), 'Text messages (SMS)'));
     }
 
     $call('PUT', $emailsUrl, ['reset' => 'all']);

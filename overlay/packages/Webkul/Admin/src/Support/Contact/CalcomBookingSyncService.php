@@ -64,6 +64,8 @@ final class CalcomBookingSyncService
             $counts[$this->upsert($booking)]++;
         }
 
+        PipelineEvents::record('bookings_synced', "Synced Cal.com bookings: {$counts['created']} new, {$counts['updated']} changed, {$counts['unchanged']} unchanged", $counts);
+
         return $counts;
     }
 
@@ -244,6 +246,34 @@ final class CalcomBookingSyncService
             $event === 'cancelled' && ! $isNew => $this->notifier->cancelled($activity, $person, $newWorkerIds),
             default => null,
         };
+
+        // Event log + automation (staff notification on a cancellation).
+        if ($event) {
+            $when = $newFrom->format('D M j, g:i A');
+            $workers = Worker::query()->whereIn('id', $newWorkerIds)->pluck('name')->implode(', ');
+            $with = $workers !== '' ? " with {$workers}" : '';
+            $name = PipelineEvents::name($person);
+
+            [$type, $summary] = match ($event) {
+                'booked' => ['booking_received', "{$name} booked {$when}{$with}"],
+                'rescheduled' => ['booking_rescheduled', "{$name} moved the visit from ".($oldFrom?->format('D M j, g:i A') ?? '?')." to {$when}{$with}"],
+                'cancelled' => ['booking_cancelled', "{$name} cancelled the visit on {$when}"],
+            };
+
+            PipelineEvents::record($type, $summary, [
+                'booking_uid' => $uid,
+                'time' => $newFrom->format('Y-m-d\TH:i'),
+                'old_time' => $oldFrom?->format('Y-m-d\TH:i'),
+                'workers' => $newWorkerIds,
+                'activity_id' => $activity->id,
+            ], $linkLead, $person);
+
+            try {
+                \Illuminate\Support\Facades\Event::dispatch('txn.booking.changed', [$event, $activity, $person, $linkLead, $summary]);
+            } catch (\Throwable $exception) {
+                Log::error('Automation after a booking change failed.', ['booking_uid' => $uid, 'error' => $exception->getMessage()]);
+            }
+        }
 
         // A phone or address from the booking form changes the lead's
         // "Missing Info" and location; re-check now, after the stage moved,

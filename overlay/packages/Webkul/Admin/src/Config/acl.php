@@ -32,6 +32,12 @@ return [
         'route' => ['admin.leads.delete', 'admin.leads.mass_delete'],
         'sort' => 4,
     ], [
+        // TXN: Leads > Event log (PipelineEvents), with its CSV export.
+        'key' => 'leads.event_log',
+        'name' => 'Event log',
+        'route' => ['admin.leads.event_log', 'admin.leads.event_log.export'],
+        'sort' => 5,
+    ], [
         // TXN: the "Schedules" / "Routes" sidebar items and header buttons.
         // The pages they open still need the Workers permission.
         'key' => 'worker_schedules',

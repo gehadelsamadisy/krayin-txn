@@ -42,9 +42,34 @@ final class LeadTriageService
      *               flow: string, location: string, missing: array, next_action: string, review: bool,
      *               changes: array, moved: bool}
      */
-    public function check(Lead $lead): array
+    public function check(Lead $lead, bool $isNew = false): array
     {
-        return DB::transaction(fn () => $this->run($lead));
+        $before = $this->stages->roleOf($lead);
+        $result = DB::transaction(fn () => $this->run($lead));
+        $result['role_before'] = $before;
+        $result['role_after'] = $this->stages->roleOf($lead->fresh() ?? $lead);
+        $result['is_new'] = $isNew;
+
+        PipelineEvents::record('lead_checked', 'Checked '.($lead->title ?: "lead {$lead->id}").': '.strtok($result['next_action'], '('), [
+            'service' => $result['service'],
+            'category' => $result['category'],
+            'flow' => $result['flow'],
+            'location' => $result['location'],
+            'missing' => $result['missing'],
+            'review' => $result['review'],
+            'moved' => $result['moved'],
+            'stage' => $lead->fresh()?->stage?->name,
+        ], $lead);
+
+        // Automation (Support\Automation): a new lead ready for a booking
+        // link, or one that needs a person. Listeners never break the check.
+        try {
+            \Illuminate\Support\Facades\Event::dispatch('txn.lead.checked', [$lead->fresh() ?? $lead, $result]);
+        } catch (\Throwable $exception) {
+            \Illuminate\Support\Facades\Log::error('Automation after the lead check failed.', ['lead_id' => $lead->id, 'error' => $exception->getMessage()]);
+        }
+
+        return $result;
     }
 
     /** True while a check started from an edit is running (see recheckAfterEdit). */
@@ -174,6 +199,7 @@ final class LeadTriageService
             'category' => $category,
             'flow' => $flow,
             'location' => $location['text'],
+            'location_status' => $location['status'],
             'missing' => $missing,
             'next_action' => $next,
             'review' => $review,

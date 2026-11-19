@@ -40,7 +40,8 @@ class LeadWebhookController
 
         dispatch(function () use ($source, $sourceLeadId) {
             try {
-                $result = app(LeadDbImportService::class)->importOne($source, $sourceLeadId);
+                // Events of this import (and any automation it starts) say "TXNHome webhook".
+                $result = \Webkul\Admin\Support\Contact\PipelineEvents::as('TXNHome webhook', 'webhook', fn () => app(LeadDbImportService::class)->importOne($source, $sourceLeadId));
             } catch (Throwable $exception) {
                 // Not retried here: "Import from lead database" or txn:import-leads brings it in.
                 Log::error("Lead webhook {$source} {$sourceLeadId}: import failed.", ['exception' => $exception]);

@@ -459,6 +459,10 @@ class TxnSettingsController extends Controller
             $values['sms.templates.booking_link'] = (string) $request->input('sms_booking_link', '');
         }
 
+        if ($request->has('sms_reminder')) {
+            $values['sms.templates.reminder'] = (string) $request->input('sms_reminder', '');
+        }
+
         return $values;
     }
 

@@ -209,6 +209,7 @@ final class TxnSettings
             'lead_messages.accent' => ['company', 'color', 'Email accent colour', []],
             'sms.signature' => ['company', 'text', 'SMS signature', ['required' => true, 'max' => 100]],
             'sms.templates.booking_link' => ['emails', 'template', 'Text message: booking link', ['required' => true, 'max' => 640, 'one_line' => true, 'placeholders' => self::SMS_PLACEHOLDERS, 'must_have' => ['link']]],
+            'sms.templates.reminder' => ['emails', 'template', 'Text message: reminder', ['required' => true, 'max' => 640, 'one_line' => true, 'placeholders' => self::SMS_PLACEHOLDERS, 'must_have' => ['link']]],
 
             'lead_triage.services' => ['services', 'services', 'Services', []],
             'lead_messages.service_lines' => ['services', 'lines', 'Service lines', []],

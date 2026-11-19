@@ -22,6 +22,13 @@ Route::controller(LeadTriageController::class)->prefix('leads')->group(function 
     Route::post('{id}/check', 'check')->name('admin.leads.triage');
 });
 
+// Leads > Event log: every pipeline step, by staff or automation (PipelineEvents).
+Route::controller(\Webkul\Admin\Http\Controllers\Lead\EventLogController::class)->prefix('leads/event-log')->group(function () {
+    Route::get('', 'index')->name('admin.leads.event_log');
+
+    Route::get('export', 'export')->name('admin.leads.event_log.export');
+});
+
 // Settings > TXN Settings > Stage rules: which stage each automatic move uses.
 Route::controller(TxnStageRulesController::class)->prefix('settings/txn/stage-rules')->group(function () {
     Route::get('', 'index')->name('admin.settings.txn.stage_rules');

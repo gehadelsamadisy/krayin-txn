@@ -24,5 +24,7 @@ return [
     // Emails (Text message). Placeholders: TxnSettings::SMS_PLACEHOLDERS.
     'templates' => [
         'booking_link' => 'Hi {first_name}, this is {signature}. Pick a time for your free, no-obligation estimate here: {link}',
+        // Sent with the 24h reminder when the SMS engine's "Reminder text" is on.
+        'reminder' => 'Hi {first_name}, {signature} here. Your free estimate times are still open: {link}',
     ],
 ];

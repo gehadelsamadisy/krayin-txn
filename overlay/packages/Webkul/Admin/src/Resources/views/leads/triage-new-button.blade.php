@@ -3,6 +3,10 @@
 @if (bouncer()->hasPermission('leads.edit'))
     {{-- The header spreads its children apart; the auto margin keeps these next to "Create Lead". --}}
     <div style="margin-left: auto; margin-right: 10px; display: flex; gap: 10px; align-items: center;">
+        @if (bouncer()->hasPermission('leads.event_log'))
+            <a href="{{ route('admin.leads.event_log') }}" class="secondary-button" title="Every step of the pipeline: leads checked, links sent, bookings received">Event log</a>
+        @endif
+
         {{-- Clicking the label opens the browser's file window; choosing a file shows the
              "Importing leads" panel and submits the form (script below). --}}
         <form id="txn-lead-import-form" method="POST" action="{{ route('admin.leads.import_csv') }}" enctype="multipart/form-data">

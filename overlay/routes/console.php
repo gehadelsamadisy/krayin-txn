@@ -127,6 +127,11 @@ Artisan::command('txn:triage-leads {--lead=* : only these lead ids} {--new : onl
         }
     }
 
+    if (! $dryRun && $rows) {
+        Webkul\Admin\Support\Contact\PipelineEvents::record('leads_checked', 'Checked '.count($rows).' '.(count($rows) === 1 ? 'lead' : 'leads').": {$counts['ready']} ready, {$counts['review']} need review"
+            .($counts['waiting for roof report'] ? ", {$counts['waiting for roof report']} waiting for a roof report" : ''), ['checked' => count($rows)] + $counts);
+    }
+
     $this->table(['Lead', 'Service', 'Category', 'Location', 'Missing', 'Next action', 'Cleaned'], $rows);
     $this->info(($dryRun ? 'DRY RUN, nothing saved. ' : '').count($rows).' leads: '.collect($counts)->map(fn ($n, $k) => "{$n} {$k}")->implode(', ').'.');
 })->purpose('Lead check: clean contact data, classify the service, check the location, set the next action');
