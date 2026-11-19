@@ -34,6 +34,27 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Krayin is reached two ways: the office address (plain http, e.g.
+        // http://192.168.100.114:8080) and the public link through Cloudflare
+        // (https://txnhome.epro.co). Cloudflare ends the https and passes the
+        // request on as http with "X-Forwarded-Proto: https". Without this,
+        // pages opened on the public link would point their data calls at
+        // http://, which the browser blocks on an https page (empty leads
+        // board). Office requests carry no such header and stay as they were.
+        // Uploaded files (logo, favicon) load from the address the page was
+        // opened on instead of APP_URL. APP_URL is still used outside web
+        // requests (queued jobs, commands).
+        if (! $this->app->runningInConsole()) {
+            // CF-Visitor ({"scheme":"https"}) too, in case a proxy between
+            // Cloudflare and the server rewrites X-Forwarded-Proto.
+            if (strtolower((string) request()->header('X-Forwarded-Proto')) === 'https'
+                || str_contains((string) request()->header('CF-Visitor'), '"https"')) {
+                \Illuminate\Support\Facades\URL::forceScheme('https');
+            }
+
+            config(['filesystems.disks.public.url' => url('/storage')]);
+        }
+
         // Values changed on Settings > TXN Settings, over the config defaults
         // (Support\Contact\TxnSettings). Again before each queued job, so a
         // long-running queue worker sees changes made after it started.
