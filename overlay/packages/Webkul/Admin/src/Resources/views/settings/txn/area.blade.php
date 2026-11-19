@@ -73,7 +73,7 @@
                 </div>
 
                 @foreach ($numbers as $name => $help)
-                    @php($key = "slot_finder.{$name}")
+                    @php $key = "slot_finder.{$name}"; @endphp
                     <div>
                         <label for="f-{{ $name }}" class="mb-1 block text-sm font-medium dark:text-gray-200">{{ $fields[$key][2] }}</label>
                         <input id="f-{{ $name }}" type="number" name="{{ $name }}" min="{{ $fields[$key][3]['min'] }}" max="{{ $fields[$key][3]['max'] }}" value="{{ old($name, $values[$key]) }}" class="{{ $small }}" @disabled(! $canEdit)>
@@ -82,7 +82,7 @@
                     </div>
                 @endforeach
 
-                @php($currentTz = $values['slot_finder.timezone'])
+                @php $currentTz = $values['slot_finder.timezone']; @endphp
                 <div>
                     <label for="f-timezone" class="mb-1 block text-sm font-medium dark:text-gray-200">{{ $fields['slot_finder.timezone'][2] }}</label>
                     <select id="f-timezone" name="timezone" class="{{ $input }}" style="max-width: 20rem;" @disabled(! $canEdit)
@@ -125,7 +125,7 @@
                 <p class="mt-1 text-sm text-gray-500">How open times are ranked and how drive times are worked out. The defaults suit most cases.</p>
 
                 @foreach ($advanced as $key => $name)
-                    @php($type = $fields[$key][1])
+                    @php $type = $fields[$key][1]; @endphp
                     <div class="mt-4">
                         @if ($type === 'bool')
                             <input type="hidden" name="{{ $name }}" value="0">
