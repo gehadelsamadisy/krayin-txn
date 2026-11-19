@@ -65,7 +65,66 @@ class WorkerController extends Controller
         return view('admin::contacts.workers.form', [
             'worker' => $worker,
             'weekdays' => self::WEEKDAYS,
+            'usage' => $this->usage($worker),
         ]);
+    }
+
+    /**
+     * Deletes a worker who was never used: no appointment or task (past,
+     * future, cancelled) and no Cal.com booking link offers them. Otherwise
+     * refused, so no booking ever loses its worker: make them inactive instead.
+     * Their time off goes with them.
+     */
+    public function destroy(Worker $worker): RedirectResponse
+    {
+        $usage = $this->usage($worker);
+
+        if ($usage['activities'] || $usage['links']) {
+            return redirect()
+                ->route('admin.contacts.workers.edit', $worker->id)
+                ->withErrors(['delete' => "{$worker->name} can't be deleted: ".$this->usageText($usage).'. Turn off "Available for new appointments" instead; their history stays.']);
+        }
+
+        $name = $worker->name;
+        $worker->delete();
+
+        return redirect()
+            ->route('admin.contacts.workers.index')
+            ->with('success', "Worker {$name} was deleted.");
+    }
+
+    /**
+     * Where a worker is used: appointments and tasks (pivot or the older
+     * worker_id column, any status) and booking links that offer them.
+     *
+     * @return array{activities: int, links: int}
+     */
+    private function usage(Worker $worker): array
+    {
+        $activities = DB::table('activities')
+            ->where('worker_id', $worker->id)
+            ->orWhereExists(fn ($pivot) => $pivot
+                ->select(DB::raw(1))
+                ->from('activity_workers')
+                ->whereColumn('activity_workers.activity_id', 'activities.id')
+                ->where('activity_workers.worker_id', $worker->id))
+            ->count();
+
+        $links = DB::table('calcom_booking_links')
+            ->pluck('slot_workers')
+            ->filter(fn ($json) => in_array($worker->id, array_map('intval', (array) json_decode((string) $json, true)), true))
+            ->count();
+
+        return ['activities' => $activities, 'links' => $links];
+    }
+
+    /** "3 appointments and 1 booking link" */
+    private function usageText(array $usage): string
+    {
+        return collect([
+            $usage['activities'] ? $usage['activities'].' '.str('appointment')->plural($usage['activities']) : null,
+            $usage['links'] ? $usage['links'].' '.str('booking link')->plural($usage['links']) : null,
+        ])->filter()->implode(' and ').' use them';
     }
 
     public function update(Request $request, Worker $worker, SlotSuggestionService $geocoder): RedirectResponse

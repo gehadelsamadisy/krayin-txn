@@ -169,6 +169,18 @@ is the drive out from and back to the office, half between customers who are
 far apart. The slot rules can't remove that; workers starting nearer their
 area, area days, or more customers per area can.
 
+## Inactive and deleted workers
+
+Contacts > Workers > Edit: "Available for new appointments" off = inactive
+(no new suggestions or bookings; history stays). **Delete this worker** (bottom
+of the edit page, permission `contacts.workers.delete`) only works for a worker
+who was never used: no appointment or task in any state (pivot
+`activity_workers` or the older `activities.worker_id`) and no Cal.com booking
+link offering them (`calcom_booking_links.slot_workers`). Otherwise it is
+refused with the counts, so no booking loses its worker. Their time off is
+deleted with them. Check: `tests/worker-delete-check.php` (run by
+`scripts/test-on-copy.sh`).
+
 ## Worker appointments and demo data
 
 Activities have a `worker_id`, `latitude` and `longitude` (migration

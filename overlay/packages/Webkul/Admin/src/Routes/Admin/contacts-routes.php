@@ -114,5 +114,7 @@ Route::prefix('contacts')->group(function () {
         Route::put('settings', 'updateSettings')->name('admin.contacts.workers.settings.update');
 
         Route::put('{worker}', 'update')->name('admin.contacts.workers.update');
+
+        Route::delete('{worker}', 'destroy')->name('admin.contacts.workers.delete');
     });
 });

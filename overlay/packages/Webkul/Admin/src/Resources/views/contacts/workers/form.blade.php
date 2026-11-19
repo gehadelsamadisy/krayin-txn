@@ -55,7 +55,7 @@
                 @method('PUT')
             @endif
 
-            @if ($errors->any())
+            @if (collect($errors->keys())->diff(['delete'])->isNotEmpty())
                 <div class="tc-alert" role="alert">
                     @include('admin::settings.txn.partials.icon', ['name' => 'alert'])
                     <div><strong>Not saved</strong>Check the fields marked below.</div>
@@ -217,6 +217,38 @@
                 'idleText' => $worker ? 'No changes yet' : 'Fill in the details, then register',
             ])
         </form>
+
+        {{-- Delete: only a worker who was never used (WorkerController::destroy checks again). --}}
+        @if ($worker && bouncer()->hasPermission('contacts.workers.delete'))
+            @php
+                $usedBy = collect([
+                    $usage['activities'] ? $usage['activities'].' '.\Illuminate\Support\Str::plural('appointment', $usage['activities']) : null,
+                    $usage['links'] ? $usage['links'].' '.\Illuminate\Support\Str::plural('booking link', $usage['links']) : null,
+                ])->filter()->implode(' and ');
+            @endphp
+            <section class="tc tc-card tc-guard-off" id="delete-worker">
+                <div class="tc-head">
+                    <span class="tc-mark" style="background: var(--tc-bad-soft); color: var(--tc-bad);">@include('admin::settings.txn.partials.icon', ['name' => 'alert'])</span>
+                    <div class="tc-title">
+                        <h2>Delete this worker</h2>
+                        @if ($usedBy)
+                            <p>{{ $worker->name }} can't be deleted: {{ $usedBy }} use them. To stop new bookings, turn off "Available for new appointments" above; their history stays.</p>
+                        @else
+                            <p>{{ $worker->name }} has no appointments and no booking link offers them, so they can be deleted. Their time off is deleted too. This can't be undone.</p>
+                        @endif
+                    </div>
+                    <form method="POST" action="{{ route('admin.contacts.workers.delete', $worker->id) }}"
+                        onsubmit="return confirm(@js('Delete '.$worker->name.' for good? This cannot be undone.'))">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="tc-btn is-danger" @disabled($usedBy !== '')>Delete worker</button>
+                    </form>
+                </div>
+                @if ($errors->has('delete'))
+                    <p class="tc-problem is-failed" role="alert"><strong>Not deleted.</strong> {{ $errors->first('delete') }}</p>
+                @endif
+            </section>
+        @endif
     </div>
 
     <template id="time-off-template">

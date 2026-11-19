@@ -197,6 +197,11 @@ return [
         ],
         'sort' => 2,
     ], [
+        'key' => 'contacts.workers.delete',
+        'name' => 'admin::app.acl.delete',
+        'route' => ['admin.contacts.workers.delete'],
+        'sort' => 3,
+    ], [
         'key' => 'contacts.workers.settings',
         'name' => 'admin::app.acl.edit',
         'route' => ['admin.contacts.workers.settings', 'admin.contacts.workers.settings.update'],
