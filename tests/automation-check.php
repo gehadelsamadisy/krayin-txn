@@ -279,8 +279,9 @@ try {
     $pendingBefore = $rowsOf($lead5, 'pending')->count();
     // Like staff dragging the card on the board: the lead record's stage changes.
     Lead::find($lead5->id)->update(['lead_pipeline_stage_id' => $prospect]);
+    // (Some of lead 5's entries were already cancelled earlier, e.g. by "Final email switched off".)
     $check('Lead moved out of Contacted (Visit Done) -> its entries cancelled', $pendingBefore > 0 && $rowsOf($lead5, 'pending')->isEmpty()
-        && $rowsOf($lead5, 'cancelled')->every(fn ($r) => str_contains((string) $r->reason, 'moved to')),
+        && $rowsOf($lead5, 'cancelled')->filter(fn ($r) => str_contains((string) $r->reason, 'moved to Visit Done'))->count() === $pendingBefore,
         "{$pendingBefore} before, ".$rowsOf($lead5, 'pending')->count().' still pending, reasons: '.$rowsOf($lead5, 'cancelled')->pluck('reason')->implode(' | '));
 
     $oldRows = $rowsOf($lead6, 'pending')->pluck('id');
