@@ -291,7 +291,13 @@ try {
     $kernel->handle(Request::create($saveUrl, 'PUT', ['reset' => 'all']));
     $check('"Reset (all off)" -> everything back off', ! TxnSettings::isSaved('automation.enabled') && ! config('automation.enabled'));
 
-    $check('No call left this machine (all faked)', Http::recorded()->every(fn ($pair) => preg_match('/geocod\.io|cal\.com|twilio\.com/', $pair[0]->url())), Http::recorded()->count().' requests');
+    // Every request was answered by the fake above (Geocodio, Cal.com, Twilio, and
+    // the routing server's road times, which the fake answers with 500).
+    $osrmHost = preg_quote((string) parse_url((string) config('slot_finder.routing.osrm_url'), PHP_URL_HOST), '/');
+    $unexpected = Http::recorded()->map(fn ($pair) => $pair[0]->url())
+        ->reject(fn ($url) => preg_match('/geocod\.io|cal\.com|twilio\.com'.($osrmHost !== '' ? "|{$osrmHost}" : '').'/', $url))
+        ->values();
+    $check('No call left this machine (all faked)', $unexpected->isEmpty(), $unexpected->take(3)->implode(' | '));
 } catch (Throwable $exception) {
     $check('Check script crashed', false, get_class($exception).': '.$exception->getMessage().' @ '.basename($exception->getFile()).':'.$exception->getLine());
 } finally {
