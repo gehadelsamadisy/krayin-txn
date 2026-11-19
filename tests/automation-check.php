@@ -278,6 +278,11 @@ try {
     $page = fn (string $uri) => $kernel->handle(Request::create($uri, 'GET'));
     $auto = $page(route('admin.settings.txn.automation', [], false));
     $check('Automation screen opens', $auto->getStatusCode() === 200 && str_contains($auto->getContent(), 'Email engine') && str_contains($auto->getContent(), 'Cal.com webhook'), 'HTTP '.$auto->getStatusCode());
+    $html = $auto->getContent();
+    $check('Each switch shows its own title (not a leftover list label)',
+        str_contains($html, 'Reminder email') && str_contains($html, 'Final email') && str_contains($html, 'Mark Lost after the last follow-up')
+        && str_contains($html, 'Text the booking link') && str_contains($html, 'Reminder text')
+        && substr_count($html, 'Roof report first') <= 3, substr_count($html, 'Roof report first').' x "Roof report first"');
     $log = $page(route('admin.leads.event_log', ['from' => '2020-01-01'], false));
     $check('Event log opens and lists the events', $log->getStatusCode() === 200 && str_contains($log->getContent(), 'Booking received'), 'HTTP '.$log->getStatusCode());
     $csv = $page(route('admin.leads.event_log.export', ['from' => '2020-01-01'], false));

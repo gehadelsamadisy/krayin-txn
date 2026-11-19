@@ -32,7 +32,7 @@
                     <span class="tc-status {{ $master ? 'is-on' : 'is-off' }}">{{ $master ? 'Running' : 'Stopped' }}</span>
                 </div>
                 <div class="tc-body">
-                    @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.enabled', 'label' => 'Master switch', 'help' => 'Turns every engine on or off at once. The Safety guards still decide who can receive anything.', 'plain' => false])
+                    @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.enabled', 'switchLabel' => 'Master switch', 'help' => 'Turns every engine on or off at once. The Safety guards still decide who can receive anything.', 'plain' => false])
                 </div>
             </section>
 
@@ -45,7 +45,7 @@
                     'aside' => '<span class="tc-status '.($engineOn('email') ? 'is-on">Working' : 'is-off">Off').'</span>',
                 ])
                 <div class="tc-body">
-                    @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.email.enabled', 'label' => 'Email engine on'])
+                    @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.email.enabled', 'switchLabel' => 'Email engine on'])
 
                     <div class="tc-options">
                         <span class="tc-label">Booking link</span>
@@ -85,7 +85,7 @@
                     'aside' => '<span class="tc-status '.($engineOn('sms') ? 'is-on">Working' : 'is-off">Off').'</span>',
                 ])
                 <div class="tc-body">
-                    @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.sms.enabled', 'label' => 'SMS engine on'])
+                    @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.sms.enabled', 'switchLabel' => 'SMS engine on'])
                     <div class="tc-options">
                         @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.sms.booking_link', 'help' => 'With the automatic booking-link email, when the customer has a phone number.'])
                         @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.sms.reminder', 'help' => 'With the reminder email (needs the Email engine\'s reminder on). Wording on Settings > TXN Settings > Emails.'])
@@ -102,7 +102,7 @@
                     'aside' => '<span class="tc-status '.($engineOn('staff') ? 'is-on">Working' : 'is-off">Off').'</span>',
                 ])
                 <div class="tc-body">
-                    @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.staff.enabled', 'label' => 'Staff notifications on'])
+                    @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.staff.enabled', 'switchLabel' => 'Staff notifications on'])
                     <div class="tc-options">
                         <div class="tc-field">
                             <label for="f-staff" class="tc-label">{{ $fields['automation.staff.recipients'][2] }}</label>
@@ -137,7 +137,7 @@
                     'aside' => '<span class="tc-status '.($webhookOn ? 'is-on">Listening' : 'is-off">Off').'</span>',
                 ])
                 <div class="tc-body">
-                    @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.webhook.enabled', 'label' => 'Accept bookings from Cal.com'])
+                    @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.webhook.enabled', 'switchLabel' => 'Accept bookings from Cal.com'])
 
                     <div class="tc-grid">
                         <div class="tc-field tc-wide">
