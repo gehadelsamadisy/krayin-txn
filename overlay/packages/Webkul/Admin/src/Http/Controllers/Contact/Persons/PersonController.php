@@ -24,6 +24,7 @@ use Webkul\Admin\Http\Resources\PersonResource;
 use Webkul\Admin\Models\Worker;
 use Webkul\Admin\Support\Contact\BookingEmail;
 use Webkul\Admin\Support\Contact\BookingLinkGuard;
+use Webkul\Admin\Support\Contact\BookingLinkSender;
 use Webkul\Admin\Support\Contact\CalcomApiException;
 use Webkul\Admin\Support\Contact\FollowUpService;
 use Webkul\Admin\Support\Contact\CalcomBookingLinkService;
@@ -282,8 +283,10 @@ class PersonController extends Controller
         $this->validateSlots($validated['slots'], $validated['timezone']);
         $slotWorkers = array_combine($validated['slots'], array_map('intval', array_values($validated['slot_workers'])));
 
+        $sender = app(BookingLinkSender::class);
+
         try {
-            $bookingUrl = $this->bookingLinkService->createBookingLink(
+            $bookingUrl = $sender->createLink(
                 $person,
                 $slotWorkers,
                 $validated['timezone'],
@@ -299,7 +302,7 @@ class PersonController extends Controller
         // Only the link created here can be emailed in step 2.
         session()->put("booking_link_draft.{$person->id}", [
             'url' => $bookingUrl,
-            'link_id' => $this->bookingLinkService->lastLinkId,
+            'link_id' => $sender->lastLinkId(),
             'timezone' => $validated['timezone'],
             'slots' => $validated['slots'],
             'slot_workers' => $slotWorkers,
@@ -410,61 +413,33 @@ class PersonController extends Controller
 
         $bookingEmail = app(BookingEmail::class);
 
-        try {
-            $bookingEmail->send(
-                'link',
-                $validated['email'],
-                array_merge(
-                    $bookingEmail->data($person, $lead, $draft['timezone'], $draft['slots'] ?? [], $bookingUrl),
-                    [
-                        'subject' => $validated['subject'],
-                        'intro' => $validated['intro'],
-                        'closing' => $validated['closing'] ?? '',
-                    ]
-                )
-            );
-        } catch (TransportExceptionInterface $exception) {
-            Log::error('Krayin could not deliver a Cal.com booking link.', [
-                'person_id' => $person->id,
-                'exception_class' => get_class($exception),
-            ]);
+        // Email (as edited on the form), lead → Contacted, follow-ups, and the
+        // text message (spec: with a phone number, text the customer too).
+        // Same steps and events as automation (BookingLinkSender).
+        $delivery = app(BookingLinkSender::class)->deliver(
+            $person,
+            $lead,
+            $validated['email'],
+            $bookingUrl,
+            array_merge(
+                $bookingEmail->data($person, $lead, $draft['timezone'], $draft['slots'] ?? [], $bookingUrl),
+                [
+                    'subject' => $validated['subject'],
+                    'intro' => $validated['intro'],
+                    'closing' => $validated['closing'] ?? '',
+                ]
+            ),
+            true
+        );
 
+        if ($delivery['email'] !== 'sent') {
             return redirect()
                 ->route('admin.contacts.persons.view', $person->id)
                 ->with('booking_link', $bookingUrl)
-                ->with('booking_link_error', $exception instanceof \Webkul\Admin\Support\Contact\MailKeyMissingException
-                    ? 'The booking link was created, but the email was not sent: '.$exception->getMessage().' Copy the link below and send it manually.'
-                    : 'The booking link was created, but Krayin could not send the email. Copy the link below and send it manually.');
+                ->with('booking_link_error', 'The booking link was created, but the email was not sent: '.$delivery['email_error'].'. Copy the link below and send it manually.');
         }
 
-        // Emailed: the customer has been contacted (only the link's lead when
-        // it was sent from a lead page).
-        try {
-            $this->leadStageService->linkSent($person, $lead);
-        } catch (Exception $exception) {
-            Log::error('Booking link sent, but the leads could not be moved to Contacted.', [
-                'person_id' => $person->id,
-                'exception_class' => get_class($exception),
-            ]);
-        }
-
-        // 24h / 72h follow-ups and Lost for this link (php artisan txn:follow-ups).
-        try {
-            app(FollowUpService::class)->start($person, $lead, $validated['email'], $bookingUrl);
-        } catch (Exception $exception) {
-            Log::error('Booking link sent, but its follow-ups could not be scheduled.', [
-                'person_id' => $person->id,
-                'error' => $exception->getMessage(),
-            ]);
-        }
-
-        // Spec: with a phone number, text the customer too (shorter version;
-        // wording in Settings > TXN Settings > Emails > Text message).
-        $sms = app(SmsSender::class)->send(
-            $person,
-            app(BookingEmail::class)->smsText($person, $lead, $bookingUrl),
-            $lead
-        );
+        $sms = $delivery['sms'];
         $smsNote = match ($sms['status']) {
             'sent' => " and texted to {$sms['to']}",
             'skipped' => ' (no text: no phone number in international format)',
