@@ -40,21 +40,25 @@ final class FollowUpService
     /**
      * Which steps may run. Null (the command, by hand): every email step,
      * no text, as before. Automation passes the engines' switches
-     * (Support\Automation\Automation::followUpGates()).
+     * (by hand: no texts; scheduled steps: runStep sets the SMS switches).
      */
-    private array $allow = ['reminder' => true, 'final' => true, 'lost' => true, 'sms_reminder' => false];
+    private array $allow = ['reminder' => true, 'final' => true, 'lost' => true, 'sms_reminder' => false, 'sms_final' => false];
 
     /** A booking link was emailed: start its sequence; older open ones for the same lead/person stop. */
     public function start(Person $person, $lead, string $email, string $url): void
     {
-        DB::table('txn_follow_ups')
+        $older = DB::table('txn_follow_ups')
             ->whereNull('stopped_at')
             ->whereNull('lost_at')
             ->where('person_id', $person->id)
-            ->when($lead, fn ($query) => $query->where(fn ($q) => $q->where('lead_id', $lead->id)->orWhereNull('lead_id')))
-            ->update(['stopped_at' => now(), 'stop_reason' => 'A newer booking link was sent', 'updated_at' => now()]);
+            ->when($lead, fn ($query) => $query->where(fn ($q) => $q->where('lead_id', $lead->id)->orWhereNull('lead_id')));
+        $olderIds = (clone $older)->pluck('id')->all();
+        $older->update(['stopped_at' => now(), 'stop_reason' => 'A newer booking link was sent', 'updated_at' => now()]);
 
-        DB::table('txn_follow_ups')->insert([
+        $scheduler = app(\Webkul\Admin\Support\Automation\MessageScheduler::class);
+        $scheduler->cancelForFollowUps($olderIds, 'A newer booking link was sent');
+
+        $id = DB::table('txn_follow_ups')->insertGetId([
             'person_id' => $person->id,
             'lead_id' => $lead?->id,
             'booking_link_id' => $this->linkIdForUrl($url),
@@ -64,6 +68,81 @@ final class FollowUpService
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        // Email engine on: each step becomes a scheduled entry with its exact time.
+        $scheduler->scheduleFollowUp((int) $id);
+    }
+
+    /**
+     * One scheduled step (txn_scheduled_messages row, MessageScheduler), at
+     * its time or "Send now". Checks again first: follow-ups still open, lead
+     * still in Contacted, step not already done, not booked in Cal.com, and
+     * (unless staff pressed Send now) the step still switched on.
+     *
+     * @return array{status: string, reason: string} sent | cancelled | failed | retry
+     */
+    public function runStep(object $scheduled, bool $manual = false): array
+    {
+        $kinds = \Webkul\Admin\Support\Automation\MessageScheduler::KINDS;
+        $row = DB::table('txn_follow_ups')->find($scheduled->follow_up_id);
+
+        if (! $row) {
+            return ['status' => 'cancelled', 'reason' => 'its follow-up no longer exists'];
+        }
+
+        if ($row->stopped_at || $row->lost_at) {
+            return ['status' => 'cancelled', 'reason' => $row->stop_reason ?: 'the follow-ups were stopped'];
+        }
+
+        $person = Person::find($row->person_id);
+        $leads = $this->contactedLeads($row, $person);
+
+        if (! $person || $leads->isEmpty()) {
+            $this->stop($row, $person, $leads, false, 'Lead is no longer in Contacted (booked or moved)');
+
+            return ['status' => 'cancelled', 'reason' => 'the lead is no longer in Contacted'];
+        }
+
+        $done = match ($scheduled->kind) {
+            'reminder' => $row->reminder_sent_at || $row->final_sent_at,
+            'final' => (bool) $row->final_sent_at,
+            'lost' => (bool) $row->lost_at,
+            default => true,
+        };
+
+        if ($done) {
+            return ['status' => 'cancelled', 'reason' => 'this step was already done'];
+        }
+
+        if (! $manual && ! \Webkul\Admin\Support\Automation\Automation::rule($kinds[$scheduled->kind][2])) {
+            return ['status' => 'cancelled', 'reason' => $kinds[$scheduled->kind][0].' is switched off'];
+        }
+
+        $booked = $this->bookedInCalcom($row);
+
+        if ($booked === null) {
+            return ['status' => 'retry', 'reason' => 'Cal.com could not be asked whether the customer booked; trying again in 15 minutes'];
+        }
+
+        if ($booked) {
+            $this->stop($row, $person, $leads, false, 'Customer booked (Cal.com; sync to update the stage)');
+
+            return ['status' => 'cancelled', 'reason' => 'the customer booked'];
+        }
+
+        $this->allow = [
+            'reminder' => true, 'final' => true, 'lost' => true,
+            'sms_reminder' => \Webkul\Admin\Support\Automation\Automation::rule('sms.reminder'),
+            'sms_final' => \Webkul\Admin\Support\Automation\Automation::rule('sms.final'),
+        ];
+
+        $line = match ($scheduled->kind) {
+            'reminder' => $this->reminder($row, $person, $leads, false, CarbonImmutable::now()),
+            'final' => $this->final($row, $person, $leads, false),
+            'lost' => $this->lost($row, $person, $leads, false),
+        };
+
+        return ['status' => 'sent', 'reason' => $line['result']];
     }
 
     /**
@@ -76,9 +155,14 @@ final class FollowUpService
     {
         $now ??= CarbonImmutable::now();
         $report = [];
-        $this->allow = array_merge(['reminder' => true, 'final' => true, 'lost' => true, 'sms_reminder' => false], $allow ?? []);
+        $this->allow = array_merge(['reminder' => true, 'final' => true, 'lost' => true, 'sms_reminder' => false, 'sms_final' => false], $allow ?? []);
 
-        foreach (DB::table('txn_follow_ups')->whereNull('stopped_at')->whereNull('lost_at')->orderBy('id')->get() as $row) {
+        // Follow-ups on the schedule (MessageScheduler) are sent by it, at their times.
+        $scheduled = \Webkul\Admin\Support\Automation\MessageScheduler::ready();
+
+        foreach (DB::table('txn_follow_ups')->whereNull('stopped_at')->whereNull('lost_at')
+            ->when($scheduled, fn ($q) => $q->whereNotExists(fn ($s) => $s->select(DB::raw(1))->from('txn_scheduled_messages')->whereColumn('txn_scheduled_messages.follow_up_id', 'txn_follow_ups.id')))
+            ->orderBy('id')->get() as $row) {
             try {
                 $report[] = $this->handle($row, $dryRun, $now);
             } catch (Throwable $exception) {
@@ -225,9 +309,23 @@ final class FollowUpService
         $this->email->send('final', $row->email, $this->email->data($person, $leads->first(), config('slot_finder.timezone'), [], null, 'final'));
         DB::table('txn_follow_ups')->where('id', $row->id)->update(['final_sent_at' => now(), 'updated_at' => now()]);
         $this->note($person, $leads, 'Final follow-up (72h) emailed', "Sent to {$row->email}.");
-        PipelineEvents::record('final_sent', 'Sent the final email to '.PipelineEvents::name($person)." ({$row->email})", ['email' => $row->email], $leads->first(), $person);
 
-        return $this->line($row, $person, $leads, 'final', "emailed {$row->email}");
+        // Final text (SMS engine; requirements A8: same channels as the first message).
+        $sms = $this->allow['sms_final'] ? $this->sms->send($person, $this->email->smsText($person, $leads->first(), '', 'final'), $leads->first()) : null;
+        $smsText = match ($sms['status'] ?? null) {
+            'sent' => ' and SMS ('.$sms['to'].')',
+            'blocked' => '; SMS blocked by the guard',
+            'skipped' => '; no SMS (no usable phone number)',
+            'failed' => '; SMS failed',
+            default => '',
+        };
+
+        PipelineEvents::record('final_sent', 'Sent the final email to '.PipelineEvents::name($person)." by email ({$row->email}){$smsText}", [
+            'email' => $row->email,
+            'sms' => $sms ? array_intersect_key($sms, array_flip(['status', 'to', 'error'])) : null,
+        ], $leads->first(), $person);
+
+        return $this->line($row, $person, $leads, 'final', "emailed {$row->email}".$smsText);
     }
 
     private function lost(object $row, Person $person, $leads, bool $dryRun): array
@@ -241,6 +339,10 @@ final class FollowUpService
 
         foreach ($leads as $lead) {
             PipelineEvents::record('marked_lost', 'Marked '.($lead->title ?: "lead {$lead->id}").' Lost: '.config('follow_ups.lost_reason'), ['reason' => config('follow_ups.lost_reason')], $lead, $person);
+
+            // Staff notifications (if on): "A lead was marked Lost".
+            app(\Webkul\Admin\Support\Automation\StaffNotifier::class)->notify('marked_lost', 'Marked Lost: '.($lead->title ?: "lead {$lead->id}"),
+                PipelineEvents::name($person)."'s lead was marked Lost after the follow-ups: ".config('follow_ups.lost_reason').'.', $lead, $person);
         }
 
         return $this->line($row, $person, $leads, 'lost', "{$moved} lead(s) marked Lost");
@@ -251,6 +353,8 @@ final class FollowUpService
         if (! $dryRun) {
             DB::table('txn_follow_ups')->where('id', $row->id)->update(['stopped_at' => now(), 'stop_reason' => $reason, 'updated_at' => now()]);
             PipelineEvents::record('follow_up_stopped', 'Stopped the follow-ups for '.PipelineEvents::name($person).": {$reason}", ['reason' => $reason], $row->lead_id, $person ?? $row->person_id);
+            // The rest of this sequence on the schedule goes too.
+            app(\Webkul\Admin\Support\Automation\MessageScheduler::class)->cancelForFollowUps([(int) $row->id], $reason);
         }
 
         return $this->line($row, $person, $leads, 'stop', ($dryRun ? 'would stop: ' : 'stopped: ').$reason);

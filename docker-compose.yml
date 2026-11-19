@@ -94,7 +94,8 @@ services:
   krayin-queue:
     <<: *krayin
     container_name: krayin-queue
-    command: ["runuser", "-u", "www-data", "--", "php", "artisan", "queue:work", "--sleep=3", "--tries=3", "--max-time=3600"]
+    # Also fires the follow-up schedule at its exact times (database queue "txn-schedule", MessageScheduler).
+    command: ["runuser", "-u", "www-data", "--", "php", "artisan", "queue:work", "database", "--queue=txn-schedule,default", "--sleep=3", "--tries=3", "--max-time=3600"]
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f 'artisan queue:work' >/dev/null"]
       interval: 30s

@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Webkul\Admin\Models\Worker;
 use Webkul\Admin\Support\Automation\Automation;
+use Webkul\Admin\Support\Automation\MessageScheduler;
 use Webkul\Admin\Support\Contact\BookingLinkSender;
 use Webkul\Admin\Support\Contact\FollowUpService;
 use Webkul\Admin\Support\Contact\LeadTriageService;
@@ -223,17 +224,89 @@ try {
     $check('Staff notifications off -> nothing', $events('staff_notified', $odd2)->isEmpty());
 
     // =====================================================================
-    $section = 'Clock (follow-up gates)';
+    $section = 'Follow-up schedule (exact times)';
     // =====================================================================
-    DB::table('txn_follow_ups')->where('lead_id', $lead2->id)->update(['link_sent_at' => now()->subHours(25)]);
-    $off = ['reminder' => false, 'final' => false, 'lost' => false, 'sms_reminder' => false];
-    app(FollowUpService::class)->run(false, CarbonImmutable::now(), $off);
-    $check('Reminder switched off -> not sent when due', DB::table('txn_follow_ups')->where('lead_id', $lead2->id)->value('reminder_sent_at') === null);
-    app(FollowUpService::class)->run(false, CarbonImmutable::now(), ['reminder' => true] + $off);
-    $check('Reminder on -> sent when due, logged', DB::table('txn_follow_ups')->where('lead_id', $lead2->id)->value('reminder_sent_at') !== null && $events('reminder_sent', $lead2)->isNotEmpty());
-    config(['automation.email.reminder' => true]);
-    $check('Clock gates follow the switches', Automation::followUpGates()['reminder'] === true && (config(['automation.enabled' => false]) || true) && Automation::anyFollowUps() === false);
-    config(['automation.enabled' => true]);
+    $sched = app(MessageScheduler::class);
+    $rowsOf = fn ($lead, ?string $status = null) => DB::table('txn_scheduled_messages')->where('lead_id', $lead->id)->when($status, fn ($q) => $q->where('status', $status))->orderBy('id')->get();
+    $rowOf = fn ($lead, string $kind, string $status = 'pending') => DB::table('txn_scheduled_messages')->where('lead_id', $lead->id)->where('kind', $kind)->where('status', $status)->orderByDesc('id')->first();
+    $fu = DB::table('txn_follow_ups')->where('lead_id', $lead2->id)->whereNull('stopped_at')->first();
+    $expect = fn (int $hours) => CarbonImmutable::parse($fu->link_sent_at)->addHours($hours)->utc()->toDateTimeString();
+
+    $r2 = $rowsOf($lead2, 'pending');
+    $check('Link sent with the Email engine on -> reminder, final and Lost scheduled at link time + their hours',
+        $r2->pluck('kind')->all() === ['reminder', 'final', 'lost']
+        && $r2[0]->due_at === $expect((int) config('follow_ups.reminder_after_hours'))
+        && $r2[1]->due_at === $expect((int) config('follow_ups.final_after_hours'))
+        && $r2[2]->due_at === $expect((int) config('follow_ups.lost_after_hours')), $r2->map(fn ($r) => "{$r->kind}@{$r->due_at}")->implode(', '));
+    $check('... each has a job waiting for its exact time (database queue)', DB::table('jobs')->where('queue', MessageScheduler::QUEUE)->count() >= 3);
+    $check('... and "scheduled" is in the event log', $events('message_scheduled', $lead2)->count() === 3);
+
+    $reminder = $rowOf($lead2, 'reminder');
+    $sched->fire($reminder->id, '2000-01-01 00:00:00');
+    $check('A job made for another time does nothing', $rowOf($lead2, 'reminder')?->id === $reminder->id);
+
+    $sched->changeTime($reminder->id, CarbonImmutable::now()->addHours(2), 'Check');
+    $moved = DB::table('txn_scheduled_messages')->find($reminder->id);
+    $check('Change time -> moved, logged', $moved->due_at !== $reminder->due_at && $events('message_rescheduled', $lead2)->isNotEmpty());
+    $sched->fire($reminder->id, $reminder->due_at);
+    $check('... the old job then does nothing', DB::table('txn_scheduled_messages')->find($reminder->id)->status === 'pending');
+
+    $sched->fire($moved->id, $moved->due_at);
+    $check('At its time: sent (reminder email), entry marked sent, logged', DB::table('txn_scheduled_messages')->find($moved->id)->status === 'sent'
+        && DB::table('txn_follow_ups')->where('id', $fu->id)->value('reminder_sent_at') !== null && $events('reminder_sent', $lead2)->count() === 1);
+    $sched->fire($moved->id, $moved->due_at);
+    $check('... never twice', $events('reminder_sent', $lead2)->count() === 1);
+
+    config(['automation.email.final' => false]);
+    $sched->syncWithSettings();
+    $cancelledFinal = $rowOf($lead2, 'final', 'cancelled');
+    $check('Final email switched off -> its entry cancelled, with the reason', $cancelledFinal && str_contains((string) $cancelledFinal->reason, 'switched off') && ! $rowOf($lead2, 'final'));
+    config(['automation.email.final' => true]);
+    $sched->syncWithSettings();
+    $check('Switched back on -> scheduled again', (bool) $rowOf($lead2, 'final'));
+
+    config(['follow_ups.lost_after_hours' => 120]);
+    $sched->syncWithSettings();
+    $check('New Lost hours -> the pending Lost entry is re-timed', $rowOf($lead2, 'lost')?->due_at === $expect(120), (string) $rowOf($lead2, 'lost')?->due_at);
+    config(['follow_ups.lost_after_hours' => 96]);
+    $sched->syncWithSettings();
+
+    $lostRow = $rowOf($lead2, 'lost');
+    $sched->cancelOne($lostRow->id, 'Check Staff');
+    $check('Staff cancel -> cancelled, with who did it', ($c = DB::table('txn_scheduled_messages')->find($lostRow->id))->status === 'cancelled' && $c->done_by === 'Check Staff');
+
+    $prospect = (int) DB::table('lead_pipeline_stages')->where('lead_pipeline_id', $defaultId)->where('code', 'prospect')->value('id');
+    $pendingBefore = $rowsOf($lead5, 'pending')->count();
+    DB::table('leads')->where('id', $lead5->id)->update(['lead_pipeline_stage_id' => $prospect]);
+    Illuminate\Support\Facades\Event::dispatch('lead.update.after', Lead::find($lead5->id));
+    $check('Lead moved out of Contacted (Visit Done) -> its entries cancelled', $pendingBefore > 0 && $rowsOf($lead5, 'pending')->isEmpty()
+        && $rowsOf($lead5, 'cancelled')->every(fn ($r) => str_contains((string) $r->reason, 'moved to')), "{$pendingBefore} before");
+
+    $oldRows = $rowsOf($lead6, 'pending')->pluck('id');
+    app(FollowUpService::class)->start(Webkul\Contact\Models\Person::find($person->id), Lead::find($lead6->id), $test, 'https://cal.com/d/auto-check-newer/home-visit');
+    $check('Newer link sent -> the old entries cancelled, new ones scheduled', $oldRows->isNotEmpty()
+        && DB::table('txn_scheduled_messages')->whereIn('id', $oldRows)->where('status', 'cancelled')->count() === $oldRows->count()
+        && $rowsOf($lead6, 'pending')->count() === 3);
+
+    $page = fn (string $uri) => $kernel->handle(Request::create($uri, 'GET'));
+    $sp = $page(route('admin.leads.scheduled', [], false));
+    $check('Scheduled messages page opens and lists them', $sp->getStatusCode() === 200 && str_contains($sp->getContent(), 'Scheduled messages') && str_contains($sp->getContent(), 'Change time'), 'HTTP '.$sp->getStatusCode());
+    $rem6 = $rowOf($lead6, 'reminder');
+    $kernel->handle(Request::create(route('admin.leads.scheduled.send_now', $rem6->id, false), 'POST'));
+    $check('Staff "Send now" -> sent at once', DB::table('txn_scheduled_messages')->find($rem6->id)->status === 'sent');
+    $fin6 = $rowOf($lead6, 'final');
+    $kernel->handle(Request::create(route('admin.leads.scheduled.retime', $fin6->id, false), 'POST', ['when' => CarbonImmutable::now(config('slot_finder.timezone'))->addDays(3)->format('Y-m-d\TH:i')]));
+    $check('Staff "Change time" from the page -> moved', DB::table('txn_scheduled_messages')->find($fin6->id)->due_at !== $fin6->due_at);
+
+    config(['automation.staff.enabled' => true, 'automation.staff.recipients' => [$test]]);
+    $lost6 = $rowOf($lead6, 'lost');
+    $sched->sendNow($lost6->id, 'Check Staff');
+    $check('Lost step -> lead marked Lost, and staff told "A lead was marked Lost"', $stageCode($lead6) === 'lost'
+        && $events('marked_lost', $lead6)->isNotEmpty() && $events('staff_notified', $lead6)->contains(fn ($e) => str_contains($e->summary, 'Marked Lost')), (string) $stageCode($lead6));
+    config(['automation.staff.enabled' => false]);
+
+    $check('Final text and reminder text are on by default (requirements A7/A8), still only with the SMS engine on',
+        config('automation.sms.reminder') === true && config('automation.sms.final') === true && in_array('marked_lost', (array) config('automation.staff.events'), true));
 
     // =====================================================================
     $section = 'Cal.com webhook';
@@ -271,6 +344,15 @@ try {
     $received = $events('booking_received', $lead2)->first();
     $check('Signed booking -> 202, saved like the Sync button, lead -> Appointment Scheduled', $status === 202 && $stageCode($lead2) === 'appointment-set', "HTTP {$status}, stage ".$stageCode($lead2));
     $check('... logged "booked … with …" by "Cal.com webhook"', $received && $received->actor === 'Cal.com webhook' && str_contains($received->summary, 'booked'), json_encode($received));
+    $check('Booked -> no follow-up left on the schedule for that lead', $rowsOf($lead2, 'pending')->isEmpty());
+
+    // The customer cancels: a cancellation email (test address) and no follow-ups.
+    $booking = array_merge($booking, ['status' => 'cancelled', 'updatedAt' => now()->addMinute()->toIso8601ZuluString()]);
+    $status = $hook(['triggerEvent' => 'BOOKING_CANCELLED', 'payload' => ['uid' => 'auto-check-1']], 'check-secret-0123456789');
+    $notice = $events('cancel_notice_sent', $lead2)->first();
+    $check('Customer cancels -> lead Canceled, cancellation email sent, logged', $status === 202 && $stageCode($lead2) === 'appointment-canceled'
+        && $notice && str_contains($notice->summary, 'by email'), json_encode($notice));
+    $check('... and nothing new on the schedule', $rowsOf($lead2, 'pending')->isEmpty());
 
     // =====================================================================
     $section = 'Screens';

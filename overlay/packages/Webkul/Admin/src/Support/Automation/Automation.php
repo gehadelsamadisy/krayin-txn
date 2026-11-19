@@ -28,6 +28,7 @@ final class Automation
         'no_times' => 'No times could be found for a lead',
         'send_failed' => 'An automatic send failed or was blocked',
         'booking_cancelled' => 'A customer cancelled a booking',
+        'marked_lost' => 'A lead was marked Lost',
     ];
 
     public static function masterOn(): bool

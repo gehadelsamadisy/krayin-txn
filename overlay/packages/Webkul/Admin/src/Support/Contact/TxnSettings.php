@@ -150,6 +150,7 @@ final class TxnSettings
         'office_phone' => 'Office phone',
         'call' => '"call or text us at <rep cell>" ("give us a call" without a cell)',
         'timezone' => 'e.g. "Central Time"',
+        'appointment' => 'The visit that was canceled, e.g. "Tuesday, Mar 2 at 9:00 AM" (cancellation email)',
     ];
 
     /** Placeholders allowed in the customer text messages (BookingEmail::smsVars). */
@@ -160,7 +161,8 @@ final class TxnSettings
         'rep_name' => 'Rep name',
         'rep_cell' => 'Rep cell',
         'service' => 'The service, e.g. "gutter"',
-        'link' => 'The booking link (required)',
+        'link' => 'The booking link (required in the link and reminder texts)',
+        'appointment' => 'The canceled visit (cancellation text)',
     ];
 
     /** Email templates: group => [title, part => [label, one line?, required?]]. */
@@ -188,6 +190,10 @@ final class TxnSettings
             'subject' => ['Subject', true, true],
             'intro' => ['Text', false, true],
         ]],
+        'cancelled' => ['Cancellation email (customer canceled)', [
+            'subject' => ['Subject', true, true],
+            'intro' => ['Text', false, true],
+        ]],
     ];
 
     public const FLOWS = ['standard' => 'Standard (booking link)', 'roof_report' => 'Roof report first'];
@@ -211,6 +217,8 @@ final class TxnSettings
             'sms.signature' => ['company', 'text', 'SMS signature', ['required' => true, 'max' => 100]],
             'sms.templates.booking_link' => ['emails', 'template', 'Text message: booking link', ['required' => true, 'max' => 640, 'one_line' => true, 'placeholders' => self::SMS_PLACEHOLDERS, 'must_have' => ['link']]],
             'sms.templates.reminder' => ['emails', 'template', 'Text message: reminder', ['required' => true, 'max' => 640, 'one_line' => true, 'placeholders' => self::SMS_PLACEHOLDERS, 'must_have' => ['link']]],
+            'sms.templates.final' => ['emails', 'template', 'Text message: final (72h)', ['required' => true, 'max' => 640, 'one_line' => true, 'placeholders' => self::SMS_PLACEHOLDERS]],
+            'sms.templates.cancelled' => ['emails', 'template', 'Text message: cancellation', ['required' => true, 'max' => 640, 'one_line' => true, 'placeholders' => self::SMS_PLACEHOLDERS]],
 
             'lead_triage.services' => ['services', 'services', 'Services', []],
             'lead_messages.service_lines' => ['services', 'lines', 'Service lines', []],
@@ -294,9 +302,12 @@ final class TxnSettings
             'automation.email.reminder' => ['automation', 'bool', 'Reminder email', []],
             'automation.email.final' => ['automation', 'bool', 'Final email', []],
             'automation.email.lost' => ['automation', 'bool', 'Mark Lost after the last follow-up', []],
+            'automation.email.cancel_notice' => ['automation', 'bool', 'Cancellation email', []],
             'automation.sms.enabled' => ['automation', 'bool', 'SMS engine', []],
             'automation.sms.booking_link' => ['automation', 'bool', 'Text the booking link', []],
             'automation.sms.reminder' => ['automation', 'bool', 'Reminder text', []],
+            'automation.sms.final' => ['automation', 'bool', 'Final text', []],
+            'automation.sms.cancel_notice' => ['automation', 'bool', 'Cancellation text', []],
             'automation.staff.enabled' => ['automation', 'bool', 'Staff notifications', []],
             'automation.staff.recipients' => ['automation', 'emails', 'Staff who get the notifications', ['max_items' => 20]],
             'automation.staff.events' => ['automation', 'multi', 'Notify about', ['choices' => \Webkul\Admin\Support\Automation\Automation::STAFF_EVENTS]],
@@ -563,6 +574,16 @@ final class TxnSettings
         });
 
         self::refreshConnections($before);
+
+        // Follow-up schedule: a step switched off cancels its pending entries,
+        // switched on schedules it, new hours re-time the pending ones.
+        if ($changes && in_array($screen, ['automation', 'follow-ups'], true)) {
+            try {
+                app(\Webkul\Admin\Support\Automation\MessageScheduler::class)->syncWithSettings();
+            } catch (Throwable $exception) {
+                \Illuminate\Support\Facades\Log::error('Follow-up schedule not updated after a settings change.', ['error' => $exception->getMessage()]);
+            }
+        }
 
         // A new key or login for a service: clear its alert until it is used again.
         foreach (array_unique(array_filter(array_map([ServiceHealth::class, 'serviceForKey'], $changedKeys))) as $service) {

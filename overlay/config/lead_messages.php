@@ -59,5 +59,10 @@ return [
             'subject' => 'Checking in about your estimate | {company}',
             'intro' => "This is {rep_name} with {company}, checking in one last time about your {service} request. If you still need help, just {call} and we'll get your **free, no-obligation estimate** scheduled.",
         ],
+        // The customer cancelled a booked visit (Email engine, "Cancellation message"). No follow-ups after it.
+        'cancelled' => [
+            'subject' => 'Your estimate appointment was canceled | {company}',
+            'intro' => "Your appointment on {appointment} has been canceled. If you'd like to reschedule your **free, no-obligation estimate**, just {call} and we'll find a time that works for you.",
+        ],
     ],
 ];

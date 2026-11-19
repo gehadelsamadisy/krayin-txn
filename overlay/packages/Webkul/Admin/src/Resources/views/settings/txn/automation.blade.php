@@ -68,10 +68,15 @@
                     </div>
 
                     <div class="tc-options">
-                        <span class="tc-label">Follow-ups <span class="tc-sublabel">(hours on <a href="{{ route('admin.settings.txn.follow_ups') }}" style="color: var(--tc-brand);">Follow-ups</a>; sent by the clock, see below)</span></span>
-                        @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.email.reminder', 'help' => 'The still-open times, or a fresh link with new times.'])
-                        @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.email.final', 'help' => '"If you still need help, call or text us."'])
-                        @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.email.lost', 'help' => 'Only leads still in Contacted, with the Lost reason from Follow-ups.'])
+                        <span class="tc-label">Follow-ups <span class="tc-sublabel">(hours on <a href="{{ route('admin.settings.txn.follow_ups') }}" style="color: var(--tc-brand);">Follow-ups</a>; each one is scheduled at its exact time, see below)</span></span>
+                        @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.email.reminder', 'help' => 'At the reminder hour: the still-open times, or a fresh link with new times.'])
+                        @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.email.final', 'help' => 'At the final hour: "If you still need help, call or text us."'])
+                        @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.email.lost', 'help' => 'At the Lost hour: only leads still in Contacted, with the Lost reason from Follow-ups.'])
+                    </div>
+
+                    <div class="tc-options">
+                        <span class="tc-label">When a customer cancels</span>
+                        @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.email.cancel_notice', 'help' => '"Your appointment on … has been canceled. To reschedule, call or text us." Once, no follow-ups after it. Wording on Emails.'])
                     </div>
                 </div>
             </section>
@@ -88,7 +93,10 @@
                     @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.sms.enabled', 'switchLabel' => 'SMS engine on'])
                     <div class="tc-options">
                         @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.sms.booking_link', 'help' => 'With the automatic booking-link email, when the customer has a phone number.'])
-                        @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.sms.reminder', 'help' => 'With the reminder email (needs the Email engine\'s reminder on). Wording on Settings > TXN Settings > Emails.'])
+                        @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.sms.reminder', 'help' => 'With the reminder email (needs the Email engine\'s reminder on).'])
+                        @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.sms.final', 'help' => 'With the final email (needs the Email engine\'s final email on).'])
+                        @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.sms.cancel_notice', 'help' => 'When a customer cancels a booked visit.'])
+                        <p class="tc-help">The wording of every text is on Settings &gt; TXN Settings &gt; Emails. The requirements send the follow-ups on the same channels as the first message, so the texts are on by default (they only go out while this engine is on).</p>
                     </div>
                 </div>
             </section>
@@ -162,12 +170,17 @@
                 </div>
             </section>
 
-            {{-- Clock --}}
+            {{-- Schedule --}}
             <section class="tc-card is-plain">
-                @include('admin::settings.txn.partials.card-head', ['icon' => 'clock', 'title' => 'The clock', 'text' => 'Follow-ups are time-based: every 15 minutes the clock sends what is due, as the switches above allow.'])
+                @include('admin::settings.txn.partials.card-head', [
+                    'icon' => 'clock',
+                    'title' => 'The schedule',
+                    'text' => 'When a booking link is emailed, each follow-up above that is on becomes an entry with its exact time ("Reminder to Jane, Thu 10:14 AM") and goes out at that time.',
+                    'aside' => bouncer()->hasPermission('leads.scheduled') ? '<a href="'.e(route('admin.leads.scheduled')).'" class="tc-btn">Scheduled messages</a>' : '',
+                ])
                 <div class="tc-body">
                     <p class="tc-note">@include('admin::settings.txn.partials.icon', ['name' => 'info', 'size' => 15])
-                        <span>The clock runs in Krayin's scheduler container, which is off until the server's <code>.env</code> has <strong>KRAYIN_SCHEDULER=true</strong> and <code>./scripts/deploy.sh</code> has run. Until then follow-ups only go out with <code>php artisan txn:follow-ups</code>.</span>
+                        <span>An entry is cancelled with the reason when the customer books, the lead leaves Contacted, a newer link is sent or its switch is turned off; turning it back on schedules the ones still ahead. Changing the hours on Follow-ups moves the pending ones. Staff can cancel, send now or change the time on <strong>Leads &gt; Scheduled messages</strong> and on each lead. The entries are fired by Krayin's queue worker (always running).</span>
                     </p>
                 </div>
             </section>

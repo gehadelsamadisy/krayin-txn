@@ -6,8 +6,8 @@
  * until someone turns it on there. The Safety guards still decide who can
  * receive an email, a text or a booking link.
  *
- * Time-based steps (follow-ups) need Krayin's scheduler container:
- * KRAYIN_SCHEDULER=true in the server .env, then ./scripts/deploy.sh.
+ * Follow-ups are a schedule (Leads > Scheduled messages): each step is sent
+ * at its exact time by the krayin-queue worker (MessageScheduler).
  */
 return [
     // Master switch: off = no engine does anything.
@@ -22,20 +22,24 @@ return [
         'reminder' => true,           // 24h reminder email
         'final' => true,              // 72h final email
         'lost' => true,               // mark Lost after the last follow-up
+        'cancel_notice' => true,      // email the customer when they cancel a booked visit
     ],
 
     // SMS engine: texts next to the emails above (Twilio, SMS guard).
+    // Requirements A7 / A8: the follow-ups go on the same channels as the first message.
     'sms' => [
         'enabled' => false,
         'booking_link' => true,
-        'reminder' => false,
+        'reminder' => true,
+        'final' => true,
+        'cancel_notice' => true,
     ],
 
     // Staff notifications: an email to staff when something needs a person.
     'staff' => [
         'enabled' => false,
         'recipients' => [],
-        'events' => ['needs_review', 'out_of_area', 'no_times', 'send_failed', 'booking_cancelled'],
+        'events' => ['needs_review', 'out_of_area', 'no_times', 'send_failed', 'booking_cancelled', 'marked_lost'],
     ],
 
     // Cal.com webhook (POST /txn/calcom-webhook): bookings arrive at once.

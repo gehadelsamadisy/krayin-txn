@@ -29,6 +29,17 @@ Route::controller(\Webkul\Admin\Http\Controllers\Lead\EventLogController::class)
     Route::get('export', 'export')->name('admin.leads.event_log.export');
 });
 
+// Leads > Scheduled messages: the follow-up schedule (MessageScheduler).
+Route::controller(\Webkul\Admin\Http\Controllers\Lead\ScheduledMessagesController::class)->prefix('leads/scheduled')->group(function () {
+    Route::get('', 'index')->name('admin.leads.scheduled');
+
+    Route::post('{id}/cancel', 'cancel')->name('admin.leads.scheduled.cancel');
+
+    Route::post('{id}/send-now', 'sendNow')->name('admin.leads.scheduled.send_now');
+
+    Route::post('{id}/retime', 'retime')->name('admin.leads.scheduled.retime');
+});
+
 // Settings > TXN Settings > Stage rules: which stage each automatic move uses.
 Route::controller(TxnStageRulesController::class)->prefix('settings/txn/stage-rules')->group(function () {
     Route::get('', 'index')->name('admin.settings.txn.stage_rules');

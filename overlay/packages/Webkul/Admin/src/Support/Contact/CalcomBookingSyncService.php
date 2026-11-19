@@ -268,8 +268,13 @@ final class CalcomBookingSyncService
                 'activity_id' => $activity->id,
             ], $linkLead, $person);
 
+            // Booked: the follow-ups on the schedule for this link are no longer needed.
+            if ($event === 'booked') {
+                app(\Webkul\Admin\Support\Automation\MessageScheduler::class)->customerBooked((int) $person->id, $linkLead?->id, $when);
+            }
+
             try {
-                \Illuminate\Support\Facades\Event::dispatch('txn.booking.changed', [$event, $activity, $person, $linkLead, $summary]);
+                \Illuminate\Support\Facades\Event::dispatch('txn.booking.changed', [$event, $activity, $person, $linkLead, $summary, $isNew]);
             } catch (\Throwable $exception) {
                 Log::error('Automation after a booking change failed.', ['booking_uid' => $uid, 'error' => $exception->getMessage()]);
             }

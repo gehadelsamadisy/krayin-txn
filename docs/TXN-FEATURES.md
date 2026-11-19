@@ -102,11 +102,33 @@ Automation** (permission `settings.txn.automation`):
 | Engine | What it does when on |
 | --- | --- |
 | Master switch | Off = no engine does anything (staff buttons still work) |
-| Email engine | A **new** lead that passes the check (optionally also a Needs Review lead that gets fixed), in a chosen flow (default Standard), gets its booking link automatically: best times suggested, Cal.com link created, email, lead → Contacted, follow-ups started. Never twice for a lead. Reminder / final email / mark Lost each on or off |
-| SMS engine | Texts the automatic booking link; reminder text (template on Emails) |
-| Staff notifications | Plain email to listed staff: lead needs review, out of area, no times found, automatic send failed/blocked, booking cancelled |
+| Email engine | A **new** lead that passes the check (optionally also a Needs Review lead that gets fixed), in a chosen flow (default Standard), gets its booking link automatically: best times suggested, Cal.com link created, email, lead → Contacted, follow-ups scheduled. Never twice for a lead. Reminder / final email / mark Lost each on or off. Cancellation email when a customer cancels a booked visit (once, no follow-ups after it) |
+| SMS engine | Texts the automatic booking link, the reminder, the final follow-up and the cancellation notice (requirements A7/A8: same channels as the first message; all on by default, only while the engine is on). Templates on Emails |
+| Staff notifications | Plain email to listed staff: lead needs review, out of area, no times found, automatic send failed/blocked, booking cancelled, lead marked Lost |
 | Cal.com webhook (own switch) | `POST /txn/calcom-webhook`: bookings, reschedules and cancellations saved at once |
-| Clock | `php artisan txn:automation-tick`, scheduled every 15 minutes: sends due follow-ups as the switches allow |
+
+**Follow-up schedule** (`txn_scheduled_messages`, `Support\Automation\MessageScheduler`):
+when a booking link is emailed with the Email engine on, each follow-up step
+that is on becomes an entry with its exact time (link time + the hours on
+Settings > Follow-ups): reminder, final email, mark Lost. Each pending entry
+has a delayed job (`Jobs\SendScheduledMessage`, Laravel database queue,
+queue `txn-schedule`) that the always-running `krayin-queue` worker fires at
+that time. The entry is the truth: a job whose entry is no longer pending, or
+whose time changed, does nothing; a claim (pending → sending) makes sure an
+entry is never sent twice. Before sending it checks again: follow-ups still
+open, lead still in Contacted, step not done, not booked in Cal.com (if
+Cal.com can't be asked, it retries 15 minutes later), step still on.
+
+Entries are **cancelled** (with the reason, in the event log) when the
+customer books (webhook or Sync), the lead leaves Contacted (any stage move)
+or is deleted, a newer link is sent, or the step / engine is switched off;
+switching it back on schedules the steps still ahead; new hours re-time the
+pending ones. **Leads > Scheduled messages** (permission `leads.scheduled`,
+actions `leads.scheduled.edit`) and a Scheduled card on each lead: see the
+entries, **Cancel**, **Send now**, **Change time**.
+`php artisan txn:schedule-repair` re-queues a job for every pending entry
+(deploy.sh runs it after migrating). `txn:follow-ups` still sends, by hand,
+follow-ups that are not on the schedule (sent before it, or with the engine off).
 
 The Safety guards apply to everything: `BookingLinkGuard` (Cal.com guard)
 is checked inside `CalcomBookingLinkService::createBookingLink`, so no path
@@ -120,9 +142,9 @@ automation: `createLink`, `deliver`, `sendAutomatic`), events
 
 **Turning it on (when you decide):**
 
-1. Clock: in the server `.env` set `KRAYIN_SCHEDULER=true`, then
-   `./scripts/deploy.sh` (starts the `krayin-scheduler` container). Without
-   it, follow-ups only go out with `php artisan txn:follow-ups`.
+1. Schedule: nothing to set up. The `krayin-queue` worker (always running)
+   listens on `database` / `txn-schedule`; check with
+   `docker exec krayin-queue ps aux | grep queue:work`.
 2. Cal.com webhook: Krayin must be reachable from the internet over HTTPS.
    In Cal.com: Settings > Developer > Webhooks > New: Subscriber URL
    `https://<krayin>/txn/calcom-webhook`, events Booking Created / Rescheduled /

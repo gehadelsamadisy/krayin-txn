@@ -82,11 +82,69 @@ final class EmailEngine
         });
     }
 
-    /** txn.booking.changed: a cancellation can tell staff. */
-    public function bookingChanged(string $event, $activity, $person, $lead, string $summary): void
+    /**
+     * txn.booking.changed: a cancelled visit tells staff and (Email / SMS
+     * engine, "Cancellation email / text") the customer, once, with no
+     * follow-ups after it. Not for a booking first seen already cancelled.
+     */
+    public function bookingChanged(string $event, $activity, $person, $lead, string $summary, bool $isNew = false): void
     {
-        if ($event === 'cancelled') {
-            $this->staff->notify('booking_cancelled', 'Booking cancelled: '.PipelineEvents::name($person), $summary.'.', $lead, $person);
+        if ($event !== 'cancelled') {
+            return;
         }
+
+        $this->staff->notify('booking_cancelled', 'Booking cancelled: '.PipelineEvents::name($person), $summary.'.', $lead, $person);
+
+        if (! $isNew) {
+            PipelineEvents::as('Automation', 'automation', fn () => $this->cancelNotice($activity, $person, $lead));
+        }
+    }
+
+    /** "Your appointment on … has been canceled. To reschedule, call or text us." */
+    private function cancelNotice($activity, $person, $lead): void
+    {
+        $email = Automation::rule('email.cancel_notice');
+        $text = Automation::rule('sms.cancel_notice');
+
+        if (! $email && ! $text) {
+            return;
+        }
+
+        $mail = app(\Webkul\Admin\Support\Contact\BookingEmail::class);
+        $when = \Carbon\CarbonImmutable::parse($activity->schedule_from)->format('l, M j \a\t g:i A');
+        $name = PipelineEvents::name($person);
+        $channels = [];
+
+        if ($email) {
+            $to = \Webkul\Admin\Support\Contact\BookingLinkGuard::personEmails($person)[0] ?? null;
+
+            if (! $to) {
+                $channels[] = 'no email address';
+            } elseif (config('txn.guard_email', true) && ! in_array(strtolower($to), array_map('strtolower', (array) config('mail_guard.allowed_recipients', [])), true)) {
+                $channels[] = 'email blocked by the guard';
+            } else {
+                try {
+                    $data = $mail->data($person, $lead, config('slot_finder.timezone'), [], null, 'cancelled');
+                    $data['appointment'] = $when;
+                    $data = array_merge($data, $mail->texts('cancelled', $data), ['parts' => $mail->sharedParts($data)]);
+                    $mail->send('cancelled', $to, $data);
+                    $channels[] = "by email ({$to})";
+                } catch (\Throwable $exception) {
+                    $channels[] = 'email failed: '.$exception->getMessage();
+                }
+            }
+        }
+
+        if ($text) {
+            $sms = app(\Webkul\Admin\Support\Contact\SmsSender::class)->send($person, $mail->smsText($person, $lead, '', 'cancelled', $when), $lead);
+            $channels[] = match ($sms['status']) {
+                'sent' => "by SMS ({$sms['to']})",
+                'blocked' => 'SMS blocked by the guard',
+                'skipped' => 'no SMS (no usable phone number)',
+                default => 'SMS failed',
+            };
+        }
+
+        PipelineEvents::record('cancel_notice_sent', "Told {$name} the visit on {$when} was canceled: ".implode(', ', $channels), ['appointment' => $when, 'channels' => $channels], $lead, $person);
     }
 }

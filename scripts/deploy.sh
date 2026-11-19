@@ -45,6 +45,8 @@ log "Starting Krayin"
 compose_app up -d $(app_services)
 
 if wait_healthy krayin 300 && docker exec -u www-data krayin php artisan migrate --force; then
+    # Follow-up schedule: a job for every pending entry (harmless if already queued).
+    docker exec -u www-data krayin php artisan txn:schedule-repair || log "WARNING: txn:schedule-repair failed; run it by hand"
     echo "$PREV" > .deploy/previous-tag
     echo "$TAG" > .deploy/current-tag
     compose_app ps

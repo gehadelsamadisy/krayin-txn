@@ -64,6 +64,7 @@ final class BookingEmail
             'office_phone' => (string) $s['office_phone'],
             'call' => $s['rep_cell'] ? "call or text us at {$s['rep_cell']}" : 'give us a call',
             'timezone' => (string) $data['timezoneLabel'],
+            'appointment' => (string) ($data['appointment'] ?? ''),
         ];
     }
 
@@ -102,7 +103,7 @@ final class BookingEmail
     }
 
     /** Placeholder values for the text messages (TxnSettings::SMS_PLACEHOLDERS). */
-    public function smsVars(string $firstName, string $service, string $url): array
+    public function smsVars(string $firstName, string $service, string $url, string $appointment = ''): array
     {
         $sender = config('lead_messages');
 
@@ -114,18 +115,22 @@ final class BookingEmail
             'rep_cell' => (string) ($sender['rep_cell'] ?? ''),
             'service' => $service,
             'link' => $url,
+            'appointment' => $appointment,
         ];
     }
 
-    /** The booking-link text message for $person (template sms.templates.booking_link). */
-    public function smsText(Person $person, $lead, string $url, string $template = 'booking_link'): string
+    /**
+     * A text message for $person from template sms.templates.{$template}:
+     * booking_link, reminder, final, cancelled. With a $url, the link always
+     * reaches the customer whatever the wording; final and cancelled have none.
+     */
+    public function smsText(Person $person, $lead, string $url, string $template = 'booking_link', string $appointment = ''): string
     {
         $firstName = strtok(trim((string) $person->name), ' ') ?: 'there';
         $service = mb_strtolower($this->serviceCategory($lead) ?? $this->serviceName($lead) ?? 'home');
-        $text = trim(self::fill(config("sms.templates.{$template}") ?: config('sms.templates.booking_link'), $this->smsVars($firstName, $service, $url)));
+        $text = trim(self::fill(config("sms.templates.{$template}") ?: config('sms.templates.booking_link'), $this->smsVars($firstName, $service, $url, $appointment)));
 
-        // The link must always reach the customer, whatever the wording.
-        return str_contains($text, $url) ? $text : trim("{$text} {$url}");
+        return $url === '' || str_contains($text, $url) ? $text : trim("{$text} {$url}");
     }
 
     /**

@@ -508,8 +508,10 @@ class TxnSettingsController extends Controller
             $values['sms.templates.booking_link'] = (string) $request->input('sms_booking_link', '');
         }
 
-        if ($request->has('sms_reminder')) {
-            $values['sms.templates.reminder'] = (string) $request->input('sms_reminder', '');
+        foreach (['sms_reminder' => 'reminder', 'sms_final' => 'final', 'sms_cancelled' => 'cancelled'] as $input => $template) {
+            if ($request->has($input)) {
+                $values["sms.templates.{$template}"] = (string) $request->input($input, '');
+            }
         }
 
         return $values;
@@ -533,6 +535,7 @@ class TxnSettingsController extends Controller
             'reminder' => ['Reminder (times open)', $sample('reminder', $slots, 'https://cal.com/example')],
             'reminder_no_times' => ['Reminder (no times left)', $sample('reminder', [], null)],
             'final' => ['Final', $sample('final', [], null)],
+            'cancelled' => ['Cancellation', $sample('cancelled', [], null)],
         ];
 
         return [
@@ -559,6 +562,8 @@ class TxnSettingsController extends Controller
             'timezoneLabel' => TxnSettings::timezoneLabel($tz),
             'url' => $url,
             'sender' => config('lead_messages'),
+            // Sample canceled visit for {appointment} (cancellation email).
+            'appointment' => now($tz)->addDays(2)->setTime(9, 0)->format('l, M j \a\t g:i A'),
         ];
 
         return $data + $mail->texts($kind, $data) + ['parts' => $mail->sharedParts($data)];

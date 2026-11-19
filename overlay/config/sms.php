@@ -26,5 +26,9 @@ return [
         'booking_link' => 'Hi {first_name}, this is {signature}. Pick a time for your free, no-obligation estimate here: {link}',
         // Sent with the 24h reminder when the SMS engine's "Reminder text" is on.
         'reminder' => 'Hi {first_name}, {signature} here. Your free estimate times are still open: {link}',
+        // With the 72h final email (SMS engine, "Final text").
+        'final' => 'Hi {first_name}, {signature} checking in one last time about your {service} request. If you still need help, call or text us at {rep_cell}.',
+        // When the customer cancels a booked visit (SMS engine, "Cancellation text").
+        'cancelled' => 'Hi {first_name}, your appointment with {signature} on {appointment} has been canceled. To reschedule your free estimate, call or text us at {rep_cell}.',
     ],
 ];

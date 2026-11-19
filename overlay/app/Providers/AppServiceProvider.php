@@ -63,7 +63,35 @@ class AppServiceProvider extends ServiceProvider
         // Settings > TXN Settings > Automation). Fired by the lead check and by
         // booking syncs; a failure is logged there and never breaks them.
         Event::listen('txn.lead.checked', fn ($lead, $result) => app(\Webkul\Admin\Support\Automation\EmailEngine::class)->leadChecked($lead, $result));
-        Event::listen('txn.booking.changed', fn ($event, $activity, $person, $lead, $summary) => app(\Webkul\Admin\Support\Automation\EmailEngine::class)->bookingChanged($event, $activity, $person, $lead, $summary));
+        Event::listen('txn.booking.changed', fn ($event, $activity, $person, $lead, $summary, $isNew = false) => app(\Webkul\Admin\Support\Automation\EmailEngine::class)->bookingChanged($event, $activity, $person, $lead, $summary, (bool) $isNew));
+
+        // Follow-up schedule: a lead that leaves Contacted (any stage move,
+        // by staff or automation) or is deleted loses its pending follow-ups.
+        Event::listen('lead.update.after', function ($lead) {
+            try {
+                if (! \Webkul\Admin\Support\Automation\MessageScheduler::ready() || ! is_object($lead)
+                    || ! \Illuminate\Support\Facades\DB::table('txn_scheduled_messages')->where('lead_id', $lead->id)->where('status', 'pending')->exists()) {
+                    return;
+                }
+
+                $fresh = \Webkul\Lead\Models\Lead::query()->with('stage')->find($lead->id);
+
+                if ($fresh && app(\Webkul\Admin\Support\Contact\LeadStageService::class)->roleOf($fresh) !== \Webkul\Admin\Support\Contact\LeadStageService::CONTACTED) {
+                    app(\Webkul\Admin\Support\Automation\MessageScheduler::class)->cancelForLead((int) $lead->id, 'The lead moved to '.($fresh->stage?->name ?? 'another stage'));
+                }
+            } catch (\Throwable $exception) {
+                Log::warning('Follow-up schedule: stage-move check failed.', ['error' => $exception->getMessage()]);
+            }
+        });
+        Event::listen('lead.delete.before', function ($id) {
+            try {
+                if (\Webkul\Admin\Support\Automation\MessageScheduler::ready() && is_numeric($id)) {
+                    app(\Webkul\Admin\Support\Automation\MessageScheduler::class)->cancelForLead((int) $id, 'The lead was deleted');
+                }
+            } catch (\Throwable $exception) {
+                Log::warning('Follow-up schedule: lead-delete check failed.', ['error' => $exception->getMessage()]);
+            }
+        });
 
         // Cal.com tells Krayin about bookings at once (own switch, signed with a secret).
         Route::post('txn/calcom-webhook', \Webkul\Admin\Http\Controllers\Contact\CalcomWebhookController::class)
@@ -71,6 +99,7 @@ class AppServiceProvider extends ServiceProvider
             ->name('txn.calcom_webhook');
 
         // Pipeline events of this lead / contact (PipelineEvents, Leads > Event log).
+        Event::listen('admin.leads.view.activities.after', fn ($view) => $view->addTemplate('admin::leads.scheduled-card'));
         Event::listen('admin.leads.view.activities.after', fn ($view) => $view->addTemplate('admin::leads.events-card'));
         Event::listen('admin.contact.persons.view.right.after', fn ($view) => $view->addTemplate('admin::leads.events-card'));
 

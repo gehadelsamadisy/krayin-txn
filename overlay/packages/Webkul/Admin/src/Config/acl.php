@@ -38,6 +38,17 @@ return [
         'route' => ['admin.leads.event_log', 'admin.leads.event_log.export'],
         'sort' => 5,
     ], [
+        // TXN: Leads > Scheduled messages (follow-up schedule).
+        'key' => 'leads.scheduled',
+        'name' => 'Scheduled messages',
+        'route' => ['admin.leads.scheduled'],
+        'sort' => 6,
+    ], [
+        'key' => 'leads.scheduled.edit',
+        'name' => 'admin::app.acl.edit',
+        'route' => ['admin.leads.scheduled.cancel', 'admin.leads.scheduled.send_now', 'admin.leads.scheduled.retime'],
+        'sort' => 1,
+    ], [
         // TXN: the "Schedules" / "Routes" sidebar items and header buttons.
         // The pages they open still need the Workers permission.
         'key' => 'worker_schedules',

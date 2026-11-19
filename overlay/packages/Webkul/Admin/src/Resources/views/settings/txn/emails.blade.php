@@ -90,13 +90,19 @@
                         </div>
 
                         @php
-                            $reminderKey = 'sms.templates.reminder';
+                            $moreTexts = [
+                                ['sms.templates.reminder', 'sms_reminder', 'with the reminder email, when the SMS engine\'s reminder text is on; {link} required'],
+                                ['sms.templates.final', 'sms_final', 'with the final email, when the SMS engine\'s final text is on'],
+                                ['sms.templates.cancelled', 'sms_cancelled', 'when a customer cancels, if the SMS engine\'s cancellation text is on; {appointment} = the canceled visit'],
+                            ];
                         @endphp
-                        <div class="tc-field" style="padding-top: 14px; border-top: 1px dashed var(--tc-line);">
-                            <label for="f-sms-reminder" class="tc-label">{{ $fields[$reminderKey][2] }} <span class="tc-sublabel">(with the 24h reminder, only when the SMS engine's reminder text is on)</span></label>
-                            <textarea id="f-sms-reminder" name="sms_reminder" rows="2" maxlength="{{ $fields[$reminderKey][3]['max'] }}" class="tc-input" @disabled(! $canEdit)>{{ old('sms_reminder', $values[$reminderKey]) }}</textarea>
-                            @include('admin::settings.txn.partials.field-meta', ['key' => $reminderKey, 'defaultText' => (string) $defaults[$reminderKey]])
-                        </div>
+                        @foreach ($moreTexts as [$textKey, $textName, $textHelp])
+                            <div class="tc-field" style="padding-top: 14px; border-top: 1px dashed var(--tc-line);">
+                                <label for="f-{{ $textName }}" class="tc-label">{{ $fields[$textKey][2] }} <span class="tc-sublabel">({{ $textHelp }})</span></label>
+                                <textarea id="f-{{ $textName }}" name="{{ $textName }}" rows="2" maxlength="{{ $fields[$textKey][3]['max'] }}" class="tc-input" @disabled(! $canEdit)>{{ old($textName, $values[$textKey]) }}</textarea>
+                                @include('admin::settings.txn.partials.field-meta', ['key' => $textKey, 'defaultText' => (string) $defaults[$textKey]])
+                            </div>
+                        @endforeach
                     </div>
                 </section>
 

@@ -137,7 +137,7 @@ Artisan::command('txn:triage-leads {--lead=* : only these lead ids} {--new : onl
 })->purpose('Lead check: clean contact data, classify the service, check the location, set the next action');
 
 // Follow-ups for emailed booking links (Support\Contact\FollowUpService):
-// 24h reminder, 72h final, then Lost. By hand: every email step. The automation clock (txn:automation-tick) runs it as the engines allow.
+// 24h reminder, 72h final, then Lost, by hand, for follow-ups NOT on the schedule (sent before it, or with the Email engine off). Scheduled ones are sent by MessageScheduler at their times.
 Artisan::command('txn:follow-ups {--dry-run : show what is due, send and change nothing}', function (Webkul\Admin\Support\Contact\FollowUpService $followUps) {
     $dryRun = (bool) $this->option('dry-run');
     $rows = $followUps->run($dryRun);
@@ -199,28 +199,15 @@ Artisan::command('txn:restore-contacts {--dry-run : show what would change, save
     return $result['skipped'] ? 1 : 0;
 })->purpose('Put the real emails and phone numbers from the lead database back on Yelp/Angi contacts');
 
-// Automation clock (Support\Automation): follow-ups that are due, as far as the
-// engines allow (Settings > TXN Settings > Automation). With the engines off
-// it does nothing. Runs only when the scheduler container is on
-// (KRAYIN_SCHEDULER=true in the server .env, then ./scripts/deploy.sh).
-Artisan::command('txn:automation-tick', function (Webkul\Admin\Support\Contact\FollowUpService $followUps) {
-    if (! Webkul\Admin\Support\Automation\Automation::anyFollowUps()) {
-        $this->info('Automation: no follow-up step is switched on; nothing to do.');
-
-        return 0;
-    }
-
-    $rows = Webkul\Admin\Support\Contact\PipelineEvents::as('Scheduler', 'scheduler',
-        fn () => $followUps->run(false, null, Webkul\Admin\Support\Automation\Automation::followUpGates()));
-
-    $counts = collect($rows)->countBy('action');
-    $this->info(now()->toDateTimeString().': '.count($rows).' open follow-up(s)'
-        .($counts->isNotEmpty() ? ': '.$counts->map(fn ($n, $action) => "{$n} {$action}")->implode(', ') : '').'.');
-
-    return 0;
-})->purpose('Automation clock: send the follow-ups that are due, as the engines allow');
-
-Schedule::command('txn:automation-tick')->everyFifteenMinutes()->withoutOverlapping(30);
 
 // Krayin's own inbound-emails:process schedule was removed: it fails with the
 // SendGrid receiver and nothing here reads incoming email.
+
+// Follow-up schedule (Support\Automation\MessageScheduler): each follow-up is
+// sent at its exact time by the krayin-queue worker; nothing polls. This puts
+// a job back for every pending entry (after a restore, or if a job was lost).
+// deploy.sh runs it after each deploy; running it twice is harmless.
+Artisan::command('txn:schedule-repair', function (Webkul\Admin\Support\Automation\MessageScheduler $scheduler) {
+    $count = $scheduler->repair();
+    $this->info("Follow-up schedule: {$count} pending ".($count === 1 ? 'entry' : 'entries').' queued for their times.');
+})->purpose('Re-queue the jobs of every pending scheduled follow-up');
