@@ -387,6 +387,52 @@ final class CalcomBookingSyncService
         return $workerId === null ? null : (int) $workerId;
     }
 
+    /**
+     * One booking by its uid, in the same shape as the bookings list (for the
+     * Cal.com webhook, which then calls upsert like the Sync button does).
+     * Throws CalcomApiException.
+     */
+    public function fetchBooking(string $uid): array
+    {
+        if (! ServiceHealth::hasKey('calcom')) {
+            throw new CalcomApiException(ServiceHealth::noKey('calcom'));
+        }
+
+        try {
+            $response = Http::withToken(config('calcom.api_key'))
+                ->acceptJson()
+                ->withHeaders(['cal-api-version' => self::BOOKINGS_API_VERSION])
+                ->timeout(30)
+                ->get(self::API_URL.'/bookings/'.rawurlencode($uid));
+        } catch (ConnectionException $exception) {
+            ServiceHealth::failed('calcom', 'Krayin could not connect to Cal.com: '.$exception->getMessage());
+
+            throw new CalcomApiException('Krayin could not connect to Cal.com to read the booking.', 0, $exception);
+        }
+
+        if (! $response->successful()) {
+            if (ServiceHealth::isAuthFailure($response)) {
+                ServiceHealth::failed('calcom', "Cal.com refused the API key (HTTP {$response->status()}): ".($response->json('error.message') ?? $response->json('message') ?? $response->body()));
+            }
+
+            throw new CalcomApiException("Cal.com rejected the booking request (HTTP {$response->status()}).");
+        }
+
+        ServiceHealth::ok('calcom');
+        $booking = $response->json('data');
+
+        // A recurring/seated booking can come back as a list.
+        if (is_array($booking) && array_is_list($booking)) {
+            $booking = $booking[0] ?? null;
+        }
+
+        if (! is_array($booking) || empty($booking['uid'])) {
+            throw new CalcomApiException('Cal.com returned no booking for this uid.');
+        }
+
+        return $booking;
+    }
+
     private function fetchBookings(CarbonImmutable $since): array
     {
         $apiKey = config('calcom.api_key');

@@ -19,7 +19,7 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Same as the "Sync Cal.com bookings" button (nothing syncs in the background).
+// Same as the "Sync Cal.com bookings" button. The Cal.com webhook (Automation) brings bookings in at once when it is on.
 Artisan::command('calcom:sync-bookings', function (Webkul\Admin\Support\Contact\CalcomBookingSyncService $sync) {
     // Shares the button's lock: two syncs at once could copy a booking twice.
     $lock = Illuminate\Support\Facades\Cache::lock('calcom-booking-sync', 120);
@@ -137,7 +137,7 @@ Artisan::command('txn:triage-leads {--lead=* : only these lead ids} {--new : onl
 })->purpose('Lead check: clean contact data, classify the service, check the location, set the next action');
 
 // Follow-ups for emailed booking links (Support\Contact\FollowUpService):
-// 24h reminder, 72h final, then Lost. Nothing runs it automatically yet.
+// 24h reminder, 72h final, then Lost. By hand: every email step. The automation clock (txn:automation-tick) runs it as the engines allow.
 Artisan::command('txn:follow-ups {--dry-run : show what is due, send and change nothing}', function (Webkul\Admin\Support\Contact\FollowUpService $followUps) {
     $dryRun = (bool) $this->option('dry-run');
     $rows = $followUps->run($dryRun);
@@ -199,4 +199,28 @@ Artisan::command('txn:restore-contacts {--dry-run : show what would change, save
     return $result['skipped'] ? 1 : 0;
 })->purpose('Put the real emails and phone numbers from the lead database back on Yelp/Angi contacts');
 
-Schedule::command('inbound-emails:process')->everyFiveMinutes();
+// Automation clock (Support\Automation): follow-ups that are due, as far as the
+// engines allow (Settings > TXN Settings > Automation). With the engines off
+// it does nothing. Runs only when the scheduler container is on
+// (KRAYIN_SCHEDULER=true in the server .env, then ./scripts/deploy.sh).
+Artisan::command('txn:automation-tick', function (Webkul\Admin\Support\Contact\FollowUpService $followUps) {
+    if (! Webkul\Admin\Support\Automation\Automation::anyFollowUps()) {
+        $this->info('Automation: no follow-up step is switched on; nothing to do.');
+
+        return 0;
+    }
+
+    $rows = Webkul\Admin\Support\Contact\PipelineEvents::as('Scheduler', 'scheduler',
+        fn () => $followUps->run(false, null, Webkul\Admin\Support\Automation\Automation::followUpGates()));
+
+    $counts = collect($rows)->countBy('action');
+    $this->info(now()->toDateTimeString().': '.count($rows).' open follow-up(s)'
+        .($counts->isNotEmpty() ? ': '.$counts->map(fn ($n, $action) => "{$n} {$action}")->implode(', ') : '').'.');
+
+    return 0;
+})->purpose('Automation clock: send the follow-ups that are due, as the engines allow');
+
+Schedule::command('txn:automation-tick')->everyFifteenMinutes()->withoutOverlapping(30);
+
+// Krayin's own inbound-emails:process schedule was removed: it fails with the
+// SendGrid receiver and nothing here reads incoming email.

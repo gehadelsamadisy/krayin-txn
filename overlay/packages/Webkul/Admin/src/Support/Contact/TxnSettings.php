@@ -36,6 +36,7 @@ final class TxnSettings
         'emails' => ['Emails', 'The booking-link, reminder and final emails, part by part.'],
         'connections' => ['Connections', 'API keys, tokens and logins for Cal.com, Twilio, email sending, Geocodio and the lead database.'],
         'safety' => ['Safety', 'Whether emails, texts and booking links can reach customers, or only the test addresses.'],
+        'automation' => ['Automation', 'Engines that send booking links, texts and staff alerts on their own, and the Cal.com webhook. Everything is off until you turn it on; the Safety guards still apply.'],
     ];
 
     /** Guards on the Safety screen: turning one off needs this typed confirmation. */
@@ -283,6 +284,24 @@ final class TxnSettings
             'calcom.test_person_ids' => ['safety', 'ids', 'Test contacts (contact IDs)', ['max_items' => 50]],
             'calcom.test_recipient_emails' => ['safety', 'emails', 'Test recipient emails', ['max_items' => 50]],
             'calcom.single_test_attempt' => ['safety', 'bool', 'Only one booking-link email per test', []],
+
+            // Automation (Support\Automation\Automation). All off by default.
+            'automation.enabled' => ['automation', 'bool', 'Automation (master switch)', []],
+            'automation.email.enabled' => ['automation', 'bool', 'Email engine', []],
+            'automation.email.send_link' => ['automation', 'bool', 'Send the booking link when a new lead passes the check', []],
+            'automation.email.when_fixed' => ['automation', 'bool', 'Also when a Needs Review lead is fixed', []],
+            'automation.email.flows' => ['automation', 'multi', 'Flows that get a link automatically', ['choices' => self::FLOWS]],
+            'automation.email.reminder' => ['automation', 'bool', 'Reminder email', []],
+            'automation.email.final' => ['automation', 'bool', 'Final email', []],
+            'automation.email.lost' => ['automation', 'bool', 'Mark Lost after the last follow-up', []],
+            'automation.sms.enabled' => ['automation', 'bool', 'SMS engine', []],
+            'automation.sms.booking_link' => ['automation', 'bool', 'Text the booking link', []],
+            'automation.sms.reminder' => ['automation', 'bool', 'Reminder text', []],
+            'automation.staff.enabled' => ['automation', 'bool', 'Staff notifications', []],
+            'automation.staff.recipients' => ['automation', 'emails', 'Staff who get the notifications', ['max_items' => 20]],
+            'automation.staff.events' => ['automation', 'multi', 'Notify about', ['choices' => \Webkul\Admin\Support\Automation\Automation::STAFF_EVENTS]],
+            'automation.webhook.enabled' => ['automation', 'bool', 'Cal.com webhook', []],
+            'automation.webhook.secret' => ['automation', 'secret', 'Cal.com webhook secret', ['min' => 16]],
         ];
 
         foreach (self::EMAIL_PARTS as $group => [$title, $parts]) {
@@ -532,6 +551,11 @@ final class TxnSettings
                     'new_value' => ($secret ? self::mask($new) : ($guard ? ($new ? 'on' : 'off') : self::describe($new))).($value === null ? ' (default)' : ''),
                     'created_at' => now(),
                 ]);
+
+                // An engine or the webhook switched on/off: also in the pipeline event log.
+                if (str_starts_with($key, 'automation.') && str_ends_with($key, 'enabled')) {
+                    PipelineEvents::record('engine_switched', $fields[$key][2].' turned '.($new ? 'ON' : 'off'), ['setting' => $key, 'on' => (bool) $new]);
+                }
 
                 $changes++;
                 $changedKeys[] = $key;
@@ -813,6 +837,20 @@ final class TxnSettings
                     'miles' => (int) $miles,
                     'address' => mb_substr(trim((string) ($value['address'] ?? '')), 0, 200),
                 ];
+                break;
+
+            case 'multi':
+                // Some of the allowed keys (none is allowed: e.g. no flow sent automatically).
+                $value = is_array($value) ? $value : preg_split('/[\s,;]+/', (string) $value, -1, PREG_SPLIT_NO_EMPTY);
+                $value = array_values(array_unique(array_map('strval', $value)));
+
+                foreach ($value as $item) {
+                    if (! array_key_exists($item, $options['choices'])) {
+                        $errors[] = "{$label}: unknown choice \"{$item}\".";
+                    }
+                }
+
+                $value = array_values(array_intersect(array_keys($options['choices']), $value));
                 break;
 
             case 'decimal':

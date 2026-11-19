@@ -684,6 +684,16 @@ return [
         'route' => 'admin.settings.txn.safety.update',
         'sort' => 1,
     ], [
+        'key' => 'settings.txn.automation',
+        'name' => 'Automation',
+        'route' => 'admin.settings.txn.automation',
+        'sort' => 9,
+    ], [
+        'key' => 'settings.txn.automation.edit',
+        'name' => 'admin::app.acl.edit',
+        'route' => 'admin.settings.txn.automation.update',
+        'sort' => 1,
+    ], [
         'key' => 'configuration',
         'name' => 'admin::app.acl.configuration',
         'route' => 'admin.configuration.index',

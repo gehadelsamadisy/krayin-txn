@@ -363,6 +363,13 @@ return [
         'route' => 'admin.settings.txn.safety',
         'sort' => 8,
         'icon-class' => 'icon-role',
+    ], [
+        'key' => 'settings.txn.automation',
+        'name' => 'Automation',
+        'info' => 'Engines for booking links, texts and staff alerts; Cal.com webhook. All off until turned on.',
+        'route' => 'admin.settings.txn.automation',
+        'sort' => 9,
+        'icon-class' => 'icon-settings-flow',
     ],
 
     /**

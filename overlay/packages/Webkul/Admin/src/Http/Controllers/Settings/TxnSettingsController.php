@@ -53,6 +53,7 @@ class TxnSettingsController extends Controller
             'connections' => $this->connectionExtras($keys),
             'safety' => $this->safetyExtras($keys),
             'area' => $this->areaExtras(),
+            'automation' => $this->automationExtras($keys),
             default => [],
         });
     }
@@ -167,6 +168,7 @@ class TxnSettingsController extends Controller
             'emails' => [$this->emails($request), []],
             'connections' => $this->connections($request),
             'safety' => $this->safety($request),
+            'automation' => [$this->automation($request), []],
         };
 
         $changes = TxnSettings::save($screen, $values, $userId, $errors);
@@ -425,6 +427,53 @@ class TxnSettingsController extends Controller
         return [
             'advanced' => collect(self::AREA_ADVANCED)->mapWithKeys(fn ($key) => [$key => $this->inputName($key)])->all(),
             'timezones' => TxnSettings::TIMEZONES,
+        ];
+    }
+
+    /**
+     * Automation: switches (hidden "0" + checkbox "1"), multi choices
+     * (checkboxes + a "_sent" marker so none ticked = none), staff emails,
+     * and the webhook secret (blank = keep). A field not on the form stays.
+     */
+    private function automation(Request $request): array
+    {
+        $values = [];
+
+        foreach (TxnSettings::keys('automation') as $key) {
+            $type = TxnSettings::fields()[$key][1];
+            $input = $this->inputName($key);
+
+            match ($type) {
+                'bool' => $request->has($input) ? $values[$key] = $request->input($input) === '1' : null,
+                'multi' => $request->has("{$input}_sent") ? $values[$key] = array_values((array) $request->input($input, [])) : null,
+                'secret' => trim((string) $request->input($input, '')) !== '' ? $values[$key] = (string) $request->input($input) : null,
+                default => $request->has($input) ? $values[$key] = (string) $request->input($input, '') : null,
+            };
+        }
+
+        return $values;
+    }
+
+    /** Automation screen: field names, the webhook secret's status and URL, and the latest automatic events. */
+    private function automationExtras(array $keys): array
+    {
+        return [
+            'inputNames' => collect($keys)->mapWithKeys(fn ($key) => [$key => $this->inputName($key)])->all(),
+            'secretStatus' => TxnSettings::secretStatus('automation.webhook.secret'),
+            'webhookUrl' => route('txn.calcom_webhook'),
+            'engines' => \Webkul\Admin\Support\Automation\Automation::ENGINES,
+            'staffEvents' => \Webkul\Admin\Support\Automation\Automation::STAFF_EVENTS,
+            'recent' => \Illuminate\Support\Facades\Schema::hasTable('txn_events')
+                ? DB::table('txn_events as e')
+                    ->leftJoin('leads as l', 'l.id', '=', 'e.lead_id')
+                    ->leftJoin('persons as p', 'p.id', '=', 'e.person_id')
+                    ->select('e.*', 'l.title as lead_title', 'p.name as person_name')
+                    ->where(fn ($q) => $q->whereIn('e.source', ['automation', 'webhook', 'scheduler'])
+                        ->orWhereIn('e.event', ['automation_skipped', 'automation_blocked', 'automation_failed', 'engine_switched', 'staff_notified']))
+                    ->orderByDesc('e.id')
+                    ->limit(20)
+                    ->get()
+                : collect(),
         ];
     }
 

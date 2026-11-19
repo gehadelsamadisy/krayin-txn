@@ -40,7 +40,7 @@ Route::controller(TxnStageRulesController::class)->prefix('settings/txn/stage-ru
 // scheduling, Follow-ups, Emails, Connections, Safety. One route pair per
 // screen, so each has its own permission (acl.php); the screen is passed to
 // the controller.
-foreach (['company', 'services', 'area', 'follow-ups', 'emails', 'connections', 'safety'] as $txnScreen) {
+foreach (['company', 'services', 'area', 'follow-ups', 'emails', 'connections', 'safety', 'automation'] as $txnScreen) {
     $txnName = 'admin.settings.txn.'.str_replace('-', '_', $txnScreen);
 
     Route::get("settings/txn/{$txnScreen}", [TxnSettingsController::class, 'show'])->defaults('screen', $txnScreen)->name($txnName);

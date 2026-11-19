@@ -59,6 +59,17 @@ class AppServiceProvider extends ServiceProvider
         Event::listen('admin.leads.index.header.right.before', fn ($view) => $view->addTemplate('admin::leads.triage-new-button'));
         Event::listen('admin.leads.index.header.after', fn ($view) => $view->addTemplate('admin::leads.import-result'));
 
+        // Automation engines (Support\Automation; all off until switched on in
+        // Settings > TXN Settings > Automation). Fired by the lead check and by
+        // booking syncs; a failure is logged there and never breaks them.
+        Event::listen('txn.lead.checked', fn ($lead, $result) => app(\Webkul\Admin\Support\Automation\EmailEngine::class)->leadChecked($lead, $result));
+        Event::listen('txn.booking.changed', fn ($event, $activity, $person, $lead, $summary) => app(\Webkul\Admin\Support\Automation\EmailEngine::class)->bookingChanged($event, $activity, $person, $lead, $summary));
+
+        // Cal.com tells Krayin about bookings at once (own switch, signed with a secret).
+        Route::post('txn/calcom-webhook', \Webkul\Admin\Http\Controllers\Contact\CalcomWebhookController::class)
+            ->middleware('api')
+            ->name('txn.calcom_webhook');
+
         // Pipeline events of this lead / contact (PipelineEvents, Leads > Event log).
         Event::listen('admin.leads.view.activities.after', fn ($view) => $view->addTemplate('admin::leads.events-card'));
         Event::listen('admin.contact.persons.view.right.after', fn ($view) => $view->addTemplate('admin::leads.events-card'));
