@@ -165,6 +165,9 @@ final class CalcomBookingLinkService
         array $fieldCodes,
         ?int $leadId = null
     ): string {
+        // Every path (page, automation, follow-ups) passes the Cal.com guard here.
+        BookingLinkGuard::assertAllows($person);
+
         $overrides = $this->overrides($slotWorkers, $timezone);
 
         $scheduleResponse = $this->post(

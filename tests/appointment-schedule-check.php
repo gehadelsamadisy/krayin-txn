@@ -665,7 +665,9 @@ try {
     $section = 'Cal.com booking page: address';
     // =====================================================================
     // A fake Cal.com that answers the three link requests; nothing real is called.
-    config(['calcom.api_key' => 'check-key']);
+    // The check contacts aren't test contacts: Cal.com guard off for these
+    // link checks (BookingLinkGuard; the guard itself is checked in automation-check).
+    config(['calcom.api_key' => 'check-key', 'txn.guard_calcom' => false]);
     $fakeCalcom = function (array $eventTypeLocations) {
         Http::swap(new Illuminate\Http\Client\Factory);
         Http::fake([

@@ -23,6 +23,7 @@ use Webkul\Admin\Http\Requests\MassDestroyRequest;
 use Webkul\Admin\Http\Resources\PersonResource;
 use Webkul\Admin\Models\Worker;
 use Webkul\Admin\Support\Contact\BookingEmail;
+use Webkul\Admin\Support\Contact\BookingLinkGuard;
 use Webkul\Admin\Support\Contact\CalcomApiException;
 use Webkul\Admin\Support\Contact\FollowUpService;
 use Webkul\Admin\Support\Contact\CalcomBookingLinkService;
@@ -316,7 +317,6 @@ class PersonController extends Controller
     public function sendBookingLink(Request $request, int $id): RedirectResponse
     {
         $person = $this->personRepository->findOrFail($id);
-        $testRecipients = config('calcom.test_recipient_emails', []);
 
         if (!$this->customerLinkAllowed($person)) {
             return back()
@@ -354,12 +354,8 @@ class PersonController extends Controller
             'slot_workers.*.required' => 'Choose a worker for each time.',
         ]);
 
-        if (config('txn.guard_calcom', true)) {
-            if (!in_array(strtolower($validated['email']), $testRecipients, true)) {
-                return back()->withErrors(['email' => 'This address is not an allowed test recipient.']);
-            }
-        } elseif (!in_array(strtolower($validated['email']), array_map('strtolower', $this->personEmails($person)), true)) {
-            return back()->withErrors(['email' => 'Choose one of this contact\'s email addresses.']);
+        if ($problem = BookingLinkGuard::recipientProblem($person, $validated['email'])) {
+            return back()->withErrors(['email' => $problem]);
         }
         $draft = session("booking_link_draft.{$person->id}");
 
@@ -496,34 +492,21 @@ class PersonController extends Controller
     /** In test mode, only one booking-link email may ever be sent (CALCOM_SINGLE_TEST_ATTEMPT). */
     private function singleTestAttempt(): bool
     {
-        return config('txn.guard_calcom', true) && config('calcom.single_test_attempt', true);
+        return BookingLinkGuard::singleTestAttempt();
     }
 
     /**
-     * Test mode: links are only created and sent for the configured test
-     * contacts. TXN_TEST_MODE=false: for any contact with an email address.
+     * Cal.com guard on: links only for the test contacts (BookingLinkGuard).
+     * Off: for any contact with an email address.
      */
     private function customerLinkAllowed(Person $person): bool
     {
-        if (!config('txn.guard_calcom', true)) {
-            return $this->personEmails($person) !== [];
-        }
-
-        $testRecipients = config('calcom.test_recipient_emails', []);
-
-        return config('calcom.allow_customer_email', false)
-            && in_array((int) $person->id, config('calcom.test_person_ids', []), true)
-            && array_intersect($testRecipients, array_map('strtolower', $this->personEmails($person))) !== [];
+        return BookingLinkGuard::allows($person) && $this->personEmails($person) !== [];
     }
 
     private function personEmails(Person $person): array
     {
-        return collect($person->emails ?? [])
-            ->pluck('value')
-            ->filter(fn($email) => is_string($email) && filter_var($email, FILTER_VALIDATE_EMAIL))
-            ->unique()
-            ->values()
-            ->all();
+        return BookingLinkGuard::personEmails($person);
     }
 
     private function validateSlots(array $slots, string $timezone): void
