@@ -277,10 +277,11 @@ try {
 
     $prospect = (int) DB::table('lead_pipeline_stages')->where('lead_pipeline_id', $defaultId)->where('code', 'prospect')->value('id');
     $pendingBefore = $rowsOf($lead5, 'pending')->count();
-    DB::table('leads')->where('id', $lead5->id)->update(['lead_pipeline_stage_id' => $prospect]);
-    Illuminate\Support\Facades\Event::dispatch('lead.update.after', Lead::find($lead5->id));
+    // Like staff dragging the card on the board: the lead record's stage changes.
+    Lead::find($lead5->id)->update(['lead_pipeline_stage_id' => $prospect]);
     $check('Lead moved out of Contacted (Visit Done) -> its entries cancelled', $pendingBefore > 0 && $rowsOf($lead5, 'pending')->isEmpty()
-        && $rowsOf($lead5, 'cancelled')->every(fn ($r) => str_contains((string) $r->reason, 'moved to')), "{$pendingBefore} before");
+        && $rowsOf($lead5, 'cancelled')->every(fn ($r) => str_contains((string) $r->reason, 'moved to')),
+        "{$pendingBefore} before, ".$rowsOf($lead5, 'pending')->count().' still pending, reasons: '.$rowsOf($lead5, 'cancelled')->pluck('reason')->implode(' | '));
 
     $oldRows = $rowsOf($lead6, 'pending')->pluck('id');
     app(FollowUpService::class)->start(Webkul\Contact\Models\Person::find($person->id), Lead::find($lead6->id), $test, 'https://cal.com/d/auto-check-newer/home-visit');

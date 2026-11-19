@@ -66,10 +66,13 @@ class AppServiceProvider extends ServiceProvider
         Event::listen('txn.booking.changed', fn ($event, $activity, $person, $lead, $summary, $isNew = false) => app(\Webkul\Admin\Support\Automation\EmailEngine::class)->bookingChanged($event, $activity, $person, $lead, $summary, (bool) $isNew));
 
         // Follow-up schedule: a lead that leaves Contacted (any stage move,
-        // by staff or automation) or is deleted loses its pending follow-ups.
-        Event::listen('lead.update.after', function ($lead) {
+        // by staff, the board or automation) or is deleted loses its pending
+        // follow-ups. Watched on the lead record itself (Eloquent "updated"),
+        // so it doesn't depend on Krayin's lead.update.after listeners
+        // letting the event through; the event is kept as a second trigger.
+        $leftContacted = function ($lead) {
             try {
-                if (! \Webkul\Admin\Support\Automation\MessageScheduler::ready() || ! is_object($lead)
+                if (! \Webkul\Admin\Support\Automation\MessageScheduler::ready() || ! is_object($lead) || ! $lead->id
                     || ! \Illuminate\Support\Facades\DB::table('txn_scheduled_messages')->where('lead_id', $lead->id)->where('status', 'pending')->exists()) {
                     return;
                 }
@@ -80,9 +83,24 @@ class AppServiceProvider extends ServiceProvider
                     app(\Webkul\Admin\Support\Automation\MessageScheduler::class)->cancelForLead((int) $lead->id, 'The lead moved to '.($fresh->stage?->name ?? 'another stage'));
                 }
             } catch (\Throwable $exception) {
-                Log::warning('Follow-up schedule: stage-move check failed.', ['error' => $exception->getMessage()]);
+                Log::warning('Follow-up schedule: stage-move check failed.', ['lead_id' => $lead->id ?? null, 'error' => $exception->getMessage()]);
+            }
+        };
+        \Webkul\Lead\Models\Lead::updated(function ($lead) use ($leftContacted) {
+            if ($lead->wasChanged('lead_pipeline_stage_id')) {
+                $leftContacted($lead);
             }
         });
+        \Webkul\Lead\Models\Lead::deleting(function ($lead) {
+            try {
+                if (\Webkul\Admin\Support\Automation\MessageScheduler::ready()) {
+                    app(\Webkul\Admin\Support\Automation\MessageScheduler::class)->cancelForLead((int) $lead->id, 'The lead was deleted');
+                }
+            } catch (\Throwable $exception) {
+                Log::warning('Follow-up schedule: lead-delete check failed.', ['error' => $exception->getMessage()]);
+            }
+        });
+        Event::listen('lead.update.after', $leftContacted);
         Event::listen('lead.delete.before', function ($id) {
             try {
                 if (\Webkul\Admin\Support\Automation\MessageScheduler::ready() && is_numeric($id)) {
