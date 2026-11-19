@@ -491,7 +491,7 @@ class TxnSettingsController extends Controller
             'firstName' => 'Jane',
             'service' => 'gutter',
             'times' => collect($slots)->map(fn ($slot) => \Carbon\CarbonImmutable::createFromFormat('!Y-m-d\TH:i', $slot, $tz)->format('l, M j \a\t g:i A'))->all(),
-            'timezoneLabel' => $tz === 'America/Chicago' ? 'Central Time' : $tz,
+            'timezoneLabel' => TxnSettings::timezoneLabel($tz),
             'url' => $url,
             'sender' => config('lead_messages'),
         ];

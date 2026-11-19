@@ -99,7 +99,7 @@ final class FollowUpService
         };
 
         if ($action === null) {
-            return $this->line($row, $person, $leads, 'wait', 'next step due '.$this->nextDue($row)->setTimezone(config('slot_finder.timezone'))->format('D M j, g:i A').' (Central)');
+            return $this->line($row, $person, $leads, 'wait', 'next step due '.$this->nextDue($row)->setTimezone(config('slot_finder.timezone'))->format('D M j, g:i A').' ('.TxnSettings::timezoneLabel().')');
         }
 
         // Booked in Cal.com but not synced yet: stop instead of chasing.

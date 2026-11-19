@@ -90,7 +90,9 @@ return [
     // ------------------------------------------------------------------
 
     'service_area' => [
-        'center_lat' => 29.7604,   // Houston
+        // Shown in the area check ("... mi from Houston, TX").
+        'address' => 'Houston, TX',
+        'center_lat' => 29.7604,
         'center_lon' => -95.3698,
         'miles' => 120,
     ],

@@ -21,7 +21,7 @@ use Webkul\Contact\Models\Person;
  * Only bookings of the private event types made by "Send booking link" are
  * copied; their slug "txn-home-visit-{person id}-..." names the person.
  * One activity per appointment: a reschedule moves it, a cancellation keeps
- * it, marked "Cancelled" and done. Times are stored as America/Chicago wall
+ * it, marked "Cancelled" and done. Times are stored as company-time-zone wall
  * time, the way Krayin's activity form stores what staff type.
  */
 final class CalcomBookingSyncService

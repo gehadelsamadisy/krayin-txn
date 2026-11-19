@@ -147,7 +147,7 @@ final class LeadTriageService
             'txn_location' => $location['text'],
             'txn_missing' => $missing ? implode(', ', $missing) : 'None',
             'txn_next_action' => $next,
-            // Central wall time, like the visit times staff see.
+            // Wall time in the company time zone, like the visit times staff see.
             'txn_checked_at' => now(config('slot_finder.timezone'))->format('Y-m-d H:i:s'),
         ]);
 
@@ -324,7 +324,7 @@ final class LeadTriageService
 
         return [
             'status' => $status,
-            'text' => ($status === 'in' ? 'In area' : 'Out of area').": {$miles} mi from Houston ({$basis})",
+            'text' => ($status === 'in' ? 'In area' : 'Out of area').": {$miles} mi from ".TxnSettings::areaCentreName()." ({$basis})",
             'error' => null,
             'precision' => $place['precision'],
         ];

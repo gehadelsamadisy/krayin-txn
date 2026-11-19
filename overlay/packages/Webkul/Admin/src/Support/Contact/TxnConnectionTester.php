@@ -176,7 +176,7 @@ final class TxnConnectionTester
             return $missing;
         }
 
-        $place = (string) (config('slot_finder.service_area.address') ?: 'Houston, TX');
+        $place = (string) (config('slot_finder.service_area.address') ?: config('slot_finder.service_area.center_lat').','.config('slot_finder.service_area.center_lon'));
         $response = Http::timeout(10)->get('https://api.geocod.io/v1.7/geocode', ['q' => $place, 'limit' => 1, 'api_key' => $this->value('slot_finder.geocodio_api_key')]);
 
         if (! $response->successful()) {

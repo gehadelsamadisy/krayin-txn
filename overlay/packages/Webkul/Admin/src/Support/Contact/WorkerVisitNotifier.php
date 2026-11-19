@@ -106,7 +106,7 @@ final class WorkerVisitNotifier
         return implode("\n", $lines);
     }
 
-    /** Activity times are stored as slot-finder (Central) wall time. */
+    /** Activity times are stored as wall time in the company time zone (slot_finder.timezone). */
     private function when($time): string
     {
         return CarbonImmutable::parse($time)->format('D M j, g:i A');

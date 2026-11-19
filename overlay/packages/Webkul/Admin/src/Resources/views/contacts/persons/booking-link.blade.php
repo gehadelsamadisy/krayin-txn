@@ -195,10 +195,10 @@
                     type="text"
                     required
                     value="{{ old('timezone', $defaultTimezone) }}"
-                    placeholder="America/Chicago"
+                    placeholder="{{ $defaultTimezone }}"
                     class="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                 >
-                <p class="mt-1 text-xs text-gray-500">Use an IANA time zone. Texas customers: America/Chicago.</p>
+                <p class="mt-1 text-xs text-gray-500">Use an IANA time zone. The company's zone (Settings &gt; TXN Settings &gt; Service area &amp; scheduling): {{ $defaultTimezone }}.</p>
 
             </div>
 
@@ -221,7 +221,7 @@
                     </div>
 
                     <div>
-                        <label for="suggest-now" class="mb-1 block text-xs font-medium dark:text-white">Pretend "now" (optional, Chicago time)</label>
+                        <label for="suggest-now" class="mb-1 block text-xs font-medium dark:text-white">Pretend "now" (optional, {{ \Webkul\Admin\Support\Contact\TxnSettings::timezoneLabel() }})</label>
                         <input
                             id="suggest-now"
                             type="datetime-local"
@@ -499,7 +499,7 @@
             const loc = data.location || {};
             let html = `<p class="text-xs text-gray-500">Now: ${escapeHtml(data.now)} (${escapeHtml(data.timezone)})<br>`
                 + `Customer: ${escapeHtml(loc.address || '-')} &rarr; located by ${escapeHtml(loc.precision || 'nothing')}`
-                + (loc.miles_from_houston != null ? `, ${loc.miles_from_houston} mi from Houston` : '')
+                + (loc.miles_from_center != null ? `, ${loc.miles_from_center} mi from ${escapeHtml(@json(\Webkul\Admin\Support\Contact\TxnSettings::areaCentreName()))}` : '')
                 + (loc.precision === 'zip' ? ' <b>(ZIP only: approximate)</b>' : '') + '</p>';
 
             if (data.workers?.length) {

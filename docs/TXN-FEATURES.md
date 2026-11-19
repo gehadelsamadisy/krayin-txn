@@ -454,7 +454,7 @@ not stored; a stored value that fails the checks is ignored. Every field has
 `txn_settings_log` (area `settings:<screen>`) and shown on the page.
 Permissions: `settings.txn.<screen>` (view) and `.edit` (save). APP_KEY and
 Krayin's own database and Redis stay in `.env` on purpose (needed to start). Keys
-and logins are on the Connections screen, the guards on Safety.
+and logins are on the Connections screen, the guards on Safety. The time zone name customers and staff read ("Central Time": emails, follow-ups, booking-link form) and the centre name in the area check ("... mi from Houston, TX") follow these settings (`TxnSettings::timezoneLabel()`, `areaCentreName()`).
 
 ### Lead stages and worker emails
 

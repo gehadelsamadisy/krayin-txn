@@ -127,6 +127,12 @@ final class TxnSettings
         return self::TIMEZONES[$timezone] ?? $timezone;
     }
 
+    /** The service-area centre as staff named it ("Houston, TX"), for "... mi from Houston, TX". */
+    public static function areaCentreName(): string
+    {
+        return trim((string) config('slot_finder.service_area.address')) ?: 'the area centre';
+    }
+
     /** Keys put over the config by the last apply()/save(), so the next apply() can undo them. */
     private static array $appliedKeys = [];
 

@@ -118,7 +118,7 @@ final class BookingEmail
                 ->map(fn (string $slot) => CarbonImmutable::createFromFormat('!Y-m-d\TH:i', $slot, $timezone)->format('l, M j \a\t g:i A'))
                 ->values()
                 ->all(),
-            'timezoneLabel' => $timezone === 'America/Chicago' ? 'Central Time' : $timezone,
+            'timezoneLabel' => TxnSettings::timezoneLabel($timezone),
             'url' => $url,
             'sender' => config('lead_messages'),
         ];

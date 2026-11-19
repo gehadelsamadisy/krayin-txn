@@ -83,7 +83,7 @@ final class SlotSuggestionService
         $point = [$location['lat'], $location['lon']];
         $area = config('slot_finder.service_area');
         $miles = $this->milesBetween([$area['center_lat'], $area['center_lon']], $point);
-        $location['miles_from_houston'] = round($miles, 1);
+        $location['miles_from_center'] = round($miles, 1);
         $result = ['status' => self::OK, 'location' => $location, 'workers' => [], 'options' => []];
 
         if ($miles > $area['miles']) {

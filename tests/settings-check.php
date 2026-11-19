@@ -231,6 +231,7 @@ try {
 
     $call('PUT', route('admin.settings.txn.area.update', [], false), $areaForm(['area_address' => 'Katy, TX']));
     $check('A new centre address is looked up and stored', config('slot_finder.service_area.address') === 'Katy, TX' && (float) config('slot_finder.service_area.center_lat') === 29.7604);
+    $check('The area check names the new centre ("... mi from Katy, TX")', TxnSettings::areaCentreName() === 'Katy, TX');
 
     // Time zone: a change needs the confirmation box.
     $areaUrl = route('admin.settings.txn.area.update', [], false);
@@ -239,6 +240,11 @@ try {
     $call('PUT', $areaUrl, $areaForm(['timezone' => 'America/Denver', 'confirm_timezone' => '1']));
     $check('Time zone change with the box ticked -> saved', config('slot_finder.timezone') === 'America/Denver', config('slot_finder.timezone'));
     $check('... and the customer-facing name follows it', TxnSettings::timezoneLabel() === 'Mountain Time', TxnSettings::timezoneLabel());
+    $person = DB::table('persons')->orderBy('id')->first();
+    $denverData = $person ? $mail->data(app(PersonRepository::class)->find($person->id), null, config('slot_finder.timezone'), ['2026-12-01T09:00'], 'https://cal.com/example') : null;
+    $check('... and the email says "Times are in Mountain Time"', $denverData && str_contains(BookingEmail::plain($denverData['closing'] ?? ''), 'Times are in Mountain Time'), json_encode($denverData['closing'] ?? 'no person'));
+    $emailsPage = $call('GET', route('admin.settings.txn.emails', [], false));
+    $check('... and the Emails preview too', str_contains($emailsPage->getContent(), 'Times are in Mountain Time'));
     $call('PUT', $areaUrl, $areaForm(['timezone' => 'Mars/Olympus', 'confirm_timezone' => '1']));
     $check('A zone not in the list -> refused', config('slot_finder.timezone') === 'America/Denver');
     $call('PUT', $areaUrl, $areaForm(['reset' => 'slot_finder.timezone']));
