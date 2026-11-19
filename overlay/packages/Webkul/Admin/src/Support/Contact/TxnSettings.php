@@ -151,6 +151,17 @@ final class TxnSettings
         'timezone' => 'e.g. "Central Time"',
     ];
 
+    /** Placeholders allowed in the customer text messages (BookingEmail::smsVars). */
+    public const SMS_PLACEHOLDERS = [
+        'first_name' => "Customer's first name",
+        'signature' => 'SMS signature (Company & sender)',
+        'company' => 'Company name',
+        'rep_name' => 'Rep name',
+        'rep_cell' => 'Rep cell',
+        'service' => 'The service, e.g. "gutter"',
+        'link' => 'The booking link (required)',
+    ];
+
     /** Email templates: group => [title, part => [label, one line?, required?]]. */
     public const EMAIL_PARTS = [
         'shared' => ['Shared by all three emails', [
@@ -196,6 +207,8 @@ final class TxnSettings
             'lead_messages.rep_cell' => ['company', 'text', 'Rep cell', ['max' => 40]],
             'lead_messages.office_phone' => ['company', 'text', 'Office phone', ['max' => 40]],
             'lead_messages.accent' => ['company', 'color', 'Email accent colour', []],
+            'sms.signature' => ['company', 'text', 'SMS signature', ['required' => true, 'max' => 100]],
+            'sms.templates.booking_link' => ['emails', 'template', 'Text message: booking link', ['required' => true, 'max' => 640, 'one_line' => true, 'placeholders' => self::SMS_PLACEHOLDERS, 'must_have' => ['link']]],
 
             'lead_triage.services' => ['services', 'services', 'Services', []],
             'lead_messages.service_lines' => ['services', 'lines', 'Service lines', []],
@@ -563,10 +576,17 @@ final class TxnSettings
                         $errors[] = "{$label}: one line only.";
                     }
 
+                    $allowed = $options['placeholders'] ?? self::PLACEHOLDERS;
                     preg_match_all('/\{([^{}]*)\}/', $value, $found);
                     foreach (array_unique($found[1]) as $name) {
-                        if (! array_key_exists($name, self::PLACEHOLDERS)) {
-                            $errors[] = "{$label}: unknown placeholder {{$name}}. Allowed: {".implode('} {', array_keys(self::PLACEHOLDERS)).'}.';
+                        if (! array_key_exists($name, $allowed)) {
+                            $errors[] = "{$label}: unknown placeholder {{$name}}. Allowed: {".implode('} {', array_keys($allowed)).'}.';
+                        }
+                    }
+
+                    foreach ($options['must_have'] ?? [] as $name) {
+                        if ($value !== '' && ! in_array($name, $found[1], true)) {
+                            $errors[] = "{$label}: must contain {{$name}}.";
                         }
                     }
                 } elseif ($type === 'text' && str_contains($value, "\n")) {

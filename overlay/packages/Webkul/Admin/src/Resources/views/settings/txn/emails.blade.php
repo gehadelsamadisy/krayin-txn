@@ -57,9 +57,33 @@
                     </section>
                 @endforeach
 
+                @php
+                    $smsKey = 'sms.templates.booking_link';
+                    $smsValue = old('sms_booking_link', $values[$smsKey]);
+                @endphp
+                <section class="flex flex-col gap-3">
+                    <h2 class="text-lg font-semibold dark:text-white">Text message (SMS) with the booking link</h2>
+                    <p class="text-sm text-gray-500">Sent with the booking-link email when the customer has a phone number. Placeholders:
+                        @foreach ($smsPlaceholders as $name => $meaning)
+                            <code title="{{ $meaning }}">{{ '{'.$name.'}' }}</code>
+                        @endforeach
+                        ({{ '{link}' }} is required).
+                    </p>
+                    <div>
+                        <label for="f-sms" class="mb-1 block text-sm font-medium dark:text-gray-200">{{ $fields[$smsKey][2] }}</label>
+                        <textarea id="f-sms" name="sms_booking_link" rows="3" maxlength="{{ $fields[$smsKey][3]['max'] }}" class="{{ $input }}" @disabled(! $canEdit)>{{ $smsValue }}</textarea>
+                        <div class="mt-1 rounded border border-gray-200 bg-gray-50 p-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                            <span class="text-xs text-gray-500">Preview:</span>
+                            <span id="sms-preview"></span>
+                        </div>
+                        <p id="sms-count" class="mt-1 text-xs text-gray-500"></p>
+                        @include('admin::settings.txn.partials.field-meta', ['key' => $smsKey, 'defaultText' => (string) $defaults[$smsKey]])
+                    </div>
+                </section>
+
                 @if ($canEdit)
                     <div class="flex justify-between gap-3">
-                        <button type="submit" name="reset" value="all" formnovalidate class="secondary-button" onclick="return confirm('Put all three emails back to their default wording?')">Reset all emails</button>
+                        <button type="submit" name="reset" value="all" formnovalidate class="secondary-button" onclick="return confirm('Put all three emails and the text message back to their default wording?')">Reset all emails</button>
                         <button type="submit" class="primary-button">Save</button>
                     </div>
                 @endif
@@ -157,6 +181,27 @@
                         box.style.display = button.trim() ? '' : 'none';
                     }
                 }
+
+                // Text message preview and length (one SMS = 160 plain characters;
+                // longer texts go as several parts, 153 characters each).
+                const smsVars = @json($smsSampleVars);
+                const smsField = document.getElementById('f-sms');
+                const updateSms = () => {
+                    if (! smsField) {
+                        return;
+                    }
+
+                    let text = smsField.value.replace(/\{([a-z_]+)\}/g, (all, name) => (name in smsVars ? smsVars[name] : all)).trim();
+                    if (! text.includes(smsVars.link)) {
+                        text = (text + ' ' + smsVars.link).trim();
+                    }
+                    const parts = text.length <= 160 ? 1 : Math.ceil(text.length / 153);
+                    document.getElementById('sms-preview').textContent = text;
+                    document.getElementById('sms-count').textContent = `${text.length} characters with the sample link: ${parts} SMS ${parts === 1 ? 'part' : 'parts'}.`
+                        + (/[^\x00-\x7F]/.test(text) ? ' Special characters (emoji, curly quotes) make each part shorter (70 characters).' : '');
+                };
+                smsField?.addEventListener('input', updateSms);
+                updateSms();
 
                 frame.addEventListener('load', update);
                 select.addEventListener('change', () => { frame.srcdoc = previews[select.value].html; });

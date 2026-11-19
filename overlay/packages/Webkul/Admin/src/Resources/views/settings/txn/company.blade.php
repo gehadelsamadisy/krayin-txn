@@ -9,6 +9,7 @@
             'rep_name' => ['lead_messages.rep_name', 'The person customers hear from ("This is ... with ...") and the signature.'],
             'rep_cell' => ['lead_messages.rep_cell', 'Customers are asked to call or text this number. Leave empty to say "give us a call".'],
             'office_phone' => ['lead_messages.office_phone', 'Shown in the email signature.'],
+            'sms_signature' => ['sms.signature', 'Who the customer texts are from: {signature} in the text message ("Hi Jane, this is ...").'],
         ];
     @endphp
 

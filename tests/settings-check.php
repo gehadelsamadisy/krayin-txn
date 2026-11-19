@@ -344,7 +344,37 @@ try {
     $call('PUT', $emailsUrl, ['reset' => 'emails:shared']);
     $check('"Reset this email" puts the shared parts back', config('lead_messages.templates.shared.greeting') === 'Hi {first_name},' && config('lead_messages.templates.shared.button') === 'Choose your time');
 
+    // Text message (SMS) with the booking link.
+    $smsPerson = app(PersonRepository::class)->find(DB::table('persons')->orderBy('id')->value('id'));
+    $smsFirst = $smsPerson ? (strtok(trim((string) $smsPerson->name), ' ') ?: 'there') : 'there';
+    if ($smsPerson) {
+        config(['sms.signature' => 'TXN Home Services']);
+        $check('With nothing saved, the text reads exactly as before',
+            $mail->smsText($smsPerson, null, $url) === "Hi {$smsFirst}, this is TXN Home Services. Pick a time for your free, no-obligation estimate here: {$url}",
+            $mail->smsText($smsPerson, null, $url));
+
+        $call('PUT', $emailsUrl, ['parts' => $parts, 'sms_booking_link' => '{first_name}, book your free {service} estimate with {company}: {link} - {signature}']);
+        $check('New text message saved and used', $mail->smsText($smsPerson, null, $url) === "{$smsFirst}, book your free home estimate with TXN Home Services: {$url} - TXN Home Services", $mail->smsText($smsPerson, null, $url));
+
+        $call('PUT', $emailsUrl, ['parts' => $parts, 'sms_booking_link' => 'Hi {first_name}, call us!']);
+        $check('A text without {link} -> refused', str_contains((string) config('sms.templates.booking_link'), '{link}'));
+        $call('PUT', $emailsUrl, ['parts' => $parts, 'sms_booking_link' => 'Hi {customer}: {link}']);
+        $check('An unknown placeholder in the text -> refused', ! str_contains((string) config('sms.templates.booking_link'), '{customer}'));
+        $call('PUT', $emailsUrl, ['parts' => $parts, 'sms_booking_link' => "Hi {first_name},\n{link}"]);
+        $check('A text on two lines -> refused', ! str_contains((string) config('sms.templates.booking_link'), "\n"));
+
+        $call('PUT', route('admin.settings.txn.company.update', [], false), $companyForm(['sms_signature' => 'Sam | TXN']));
+        $check('SMS signature saved on Company & sender and used in the text', config('sms.signature') === 'Sam | TXN' && str_ends_with($mail->smsText($smsPerson, null, $url), '- Sam | TXN'));
+        $call('PUT', route('admin.settings.txn.company.update', [], false), ['reset' => 'sms.signature']);
+        $check('SMS signature reset', ! TxnSettings::isSaved('sms.signature'));
+        config(['sms.signature' => 'TXN Home Services']);
+
+        $emailsPage = $call('GET', route('admin.settings.txn.emails', [], false));
+        $check('Emails page shows the text message with its preview', str_contains($emailsPage->getContent(), 'id="sms-preview"') && str_contains($emailsPage->getContent(), 'Text message (SMS)'));
+    }
+
     $call('PUT', $emailsUrl, ['reset' => 'all']);
+    $check('"Reset all emails" also puts the text message back', ! TxnSettings::isSaved('sms.templates.booking_link'));
     [$text] = $render($sample('final', [], null));
     $check('"Reset all emails" -> today\'s final email again', str_contains($squash($text), $squash($expected['final'][1])));
 

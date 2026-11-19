@@ -16,6 +16,13 @@ return [
         explode(',', (string) env('SMS_ALLOWED_RECIPIENTS', ''))
     ))),
 
-    // Signature at the end of customer texts (spec: "<rep name> | TXN Home Services").
+    // Who the customer texts are from ("this is <signature>"). Default; staff
+    // change it in Settings > TXN Settings > Company & sender.
     'signature' => env('SMS_SIGNATURE', 'TXN Home Services'),
+
+    // Customer texts. Defaults; staff change them in Settings > TXN Settings >
+    // Emails (Text message). Placeholders: TxnSettings::SMS_PLACEHOLDERS.
+    'templates' => [
+        'booking_link' => 'Hi {first_name}, this is {signature}. Pick a time for your free, no-obligation estimate here: {link}',
+    ],
 ];

@@ -299,9 +299,15 @@ class TxnSettingsController extends Controller
 
     private function company(Request $request): array
     {
-        return collect(['company', 'rep_name', 'rep_cell', 'office_phone', 'accent'])
+        $values = collect(['company', 'rep_name', 'rep_cell', 'office_phone', 'accent'])
             ->mapWithKeys(fn ($name) => ["lead_messages.{$name}" => (string) $request->input($name, '')])
             ->all();
+
+        if ($request->has('sms_signature')) {
+            $values['sms.signature'] = (string) $request->input('sms_signature', '');
+        }
+
+        return $values;
     }
 
     /** Rows (keywords, category, flow, confirmation line, order) -> the service list and the service lines. */
@@ -449,6 +455,10 @@ class TxnSettingsController extends Controller
             }
         }
 
+        if ($request->has('sms_booking_link')) {
+            $values['sms.templates.booking_link'] = (string) $request->input('sms_booking_link', '');
+        }
+
         return $values;
     }
 
@@ -474,6 +484,8 @@ class TxnSettingsController extends Controller
 
         return [
             'placeholders' => TxnSettings::PLACEHOLDERS,
+            'smsPlaceholders' => TxnSettings::SMS_PLACEHOLDERS,
+            'smsSampleVars' => $mail->smsVars('Jane', 'gutter', 'https://cal.com/example'),
             'sampleVars' => $mail->vars($previews['link'][1]),
             'previews' => collect($previews)->map(fn ($preview) => [
                 'label' => $preview[0],

@@ -101,6 +101,33 @@ final class BookingEmail
         return preg_replace('/\*\*(.+?)\*\*/s', '$1', trim((string) $text));
     }
 
+    /** Placeholder values for the text messages (TxnSettings::SMS_PLACEHOLDERS). */
+    public function smsVars(string $firstName, string $service, string $url): array
+    {
+        $sender = config('lead_messages');
+
+        return [
+            'first_name' => $firstName,
+            'signature' => (string) config('sms.signature'),
+            'company' => (string) ($sender['company'] ?? ''),
+            'rep_name' => (string) ($sender['rep_name'] ?? ''),
+            'rep_cell' => (string) ($sender['rep_cell'] ?? ''),
+            'service' => $service,
+            'link' => $url,
+        ];
+    }
+
+    /** The booking-link text message for $person (template sms.templates.booking_link). */
+    public function smsText(Person $person, $lead, string $url): string
+    {
+        $firstName = strtok(trim((string) $person->name), ' ') ?: 'there';
+        $service = mb_strtolower($this->serviceCategory($lead) ?? $this->serviceName($lead) ?? 'home');
+        $text = trim(self::fill(config('sms.templates.booking_link'), $this->smsVars($firstName, $service, $url)));
+
+        // The link must always reach the customer, whatever the wording.
+        return str_contains($text, $url) ? $text : trim("{$text} {$url}");
+    }
+
     /**
      * Template data: first name, the lead's service, the times ("Monday, Nov 9
      * at 11:00 AM" in $timezone, from "Y-m-d\TH:i" $slots), the link, the

@@ -462,11 +462,11 @@ class PersonController extends Controller
             ]);
         }
 
-        // Spec: with a phone number, text the customer too (shorter version).
-        $firstName = strtok(trim((string) $person->name), ' ') ?: 'there';
+        // Spec: with a phone number, text the customer too (shorter version;
+        // wording in Settings > TXN Settings > Emails > Text message).
         $sms = app(SmsSender::class)->send(
             $person,
-            "Hi {$firstName}, this is ".config('sms.signature').'. Pick a time for your free, no-obligation estimate here: '.$bookingUrl,
+            app(BookingEmail::class)->smsText($person, $lead, $bookingUrl),
             $lead
         );
         $smsNote = match ($sms['status']) {
