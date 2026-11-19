@@ -232,6 +232,58 @@ try {
     $call('PUT', route('admin.settings.txn.area.update', [], false), $areaForm(['area_address' => 'Katy, TX']));
     $check('A new centre address is looked up and stored', config('slot_finder.service_area.address') === 'Katy, TX' && (float) config('slot_finder.service_area.center_lat') === 29.7604);
 
+    // Time zone: a change needs the confirmation box.
+    $areaUrl = route('admin.settings.txn.area.update', [], false);
+    $call('PUT', $areaUrl, $areaForm(['timezone' => 'America/Denver']));
+    $check('Time zone change without the box ticked -> refused', config('slot_finder.timezone') === 'America/Chicago', config('slot_finder.timezone'));
+    $call('PUT', $areaUrl, $areaForm(['timezone' => 'America/Denver', 'confirm_timezone' => '1']));
+    $check('Time zone change with the box ticked -> saved', config('slot_finder.timezone') === 'America/Denver', config('slot_finder.timezone'));
+    $check('... and the customer-facing name follows it', TxnSettings::timezoneLabel() === 'Mountain Time', TxnSettings::timezoneLabel());
+    $call('PUT', $areaUrl, $areaForm(['timezone' => 'Mars/Olympus', 'confirm_timezone' => '1']));
+    $check('A zone not in the list -> refused', config('slot_finder.timezone') === 'America/Denver');
+    $call('PUT', $areaUrl, $areaForm(['reset' => 'slot_finder.timezone']));
+    $check('Time zone reset to the default', config('slot_finder.timezone') === 'America/Chicago' && TxnSettings::timezoneLabel() === 'Central Time');
+
+    // Ranking & routes (advanced).
+    $adv = fn (string $key) => str_replace('.', '__', $key);
+    $call('PUT', $areaUrl, $areaForm([
+        $adv('slot_finder.ranking.road_times') => '0',
+        $adv('slot_finder.road_distance_factor') => '1.45',
+        $adv('slot_finder.average_speed_mph') => '30',
+        $adv('slot_finder.routing.osrm_url') => 'https://osrm.txn-check.example/',
+        $adv('slot_finder.routing.traffic_factors') => [
+            ['from' => '16:30', 'to' => '18:00', 'factor' => '1.4'],
+            ['from' => '7:00', 'to' => '09:00', 'factor' => '1.6'],
+            ['from' => '', 'to' => '', 'factor' => ''],
+            ['from' => '12:00', 'to' => '13:00', 'factor' => '1.2', 'remove' => '1'],
+        ],
+    ]));
+    $check('Road times switched off', config('slot_finder.ranking.road_times') === false);
+    $check('Decimal and whole numbers saved', (float) config('slot_finder.road_distance_factor') === 1.45 && (int) config('slot_finder.average_speed_mph') === 30);
+    $check('Routing server saved without the trailing /', config('slot_finder.routing.osrm_url') === 'https://osrm.txn-check.example', (string) config('slot_finder.routing.osrm_url'));
+    $check('Rush hours: empty and removed rows dropped, times cleaned, sorted', config('slot_finder.routing.traffic_factors') === [['07:00', '09:00', 1.6], ['16:30', '18:00', 1.4]], json_encode(config('slot_finder.routing.traffic_factors')));
+    $check('... and used for drive times (weekday 08:00 -> 1.6, Sunday -> base)',
+        Webkul\Admin\Support\Contact\WorkerRouteService::trafficFactor(Carbon\CarbonImmutable::parse('2026-11-16 08:00')) == 1.6
+        && Webkul\Admin\Support\Contact\WorkerRouteService::trafficFactor(Carbon\CarbonImmutable::parse('2026-11-15 08:00')) == config('slot_finder.routing.base_traffic_factor'));
+    $logged = DB::table('txn_settings_log')->where('area', 'settings:area')->where('item', 'Rush hours (weekdays)')->orderByDesc('id')->first();
+    $check('Rush hours change logged readably', $logged && $logged->new_value === '07:00 to 09:00 x1.6; 16:30 to 18:00 x1.4', $logged->new_value ?? 'no log row');
+
+    $call('PUT', $areaUrl, $areaForm([$adv('slot_finder.routing.osrm_url') => 'osrm.example']));
+    $check('A routing address without http(s):// -> refused', config('slot_finder.routing.osrm_url') === 'https://osrm.txn-check.example');
+    $call('PUT', $areaUrl, $areaForm([$adv('slot_finder.routing.traffic_factors') => [['from' => '07:00', 'to' => '09:00', 'factor' => '1.5'], ['from' => '08:30', 'to' => '10:00', 'factor' => '1.5']]]));
+    $check('Overlapping rush hours -> refused', count(config('slot_finder.routing.traffic_factors')) === 2 && config('slot_finder.routing.traffic_factors')[1][0] === '16:30');
+    $call('PUT', $areaUrl, $areaForm([$adv('slot_finder.road_distance_factor') => '7']));
+    $check('A factor out of range -> refused', (float) config('slot_finder.road_distance_factor') === 1.45);
+
+    $call('PUT', $areaUrl, $areaForm(['reset' => 'all']));
+    $check('Reset this page: ranking & routes back to the defaults',
+        config('slot_finder.ranking.road_times') === TxnSettings::default('slot_finder.ranking.road_times')
+        && config('slot_finder.routing.traffic_factors') === TxnSettings::default('slot_finder.routing.traffic_factors')
+        && config('slot_finder.routing.osrm_url') === TxnSettings::default('slot_finder.routing.osrm_url'));
+
+    $areaPage = $call('GET', route('admin.settings.txn.area', [], false));
+    $check('Service area page shows the time zone and the advanced section', $areaPage->getStatusCode() === 200 && str_contains($areaPage->getContent(), 'Central Time (America/Chicago)') && str_contains($areaPage->getContent(), 'Ranking &amp; routes'), 'HTTP '.$areaPage->getStatusCode());
+
     // =====================================================================
     $section = 'Follow-ups';
     // =====================================================================

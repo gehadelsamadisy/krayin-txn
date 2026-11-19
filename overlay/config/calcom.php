@@ -3,7 +3,6 @@
 return [
     'api_key' => env('CALCOM_API_KEY', env('CAL_API_KEY')),
     'allow_customer_email' => (bool) env('CALCOM_ALLOW_CUSTOMER_EMAIL', false),
-    'default_timezone' => env('CALCOM_DEFAULT_TIMEZONE', 'America/Chicago'),
     // Comma-separated lists: the test contacts (ids) and the addresses
     // booking links may be emailed to.
     'test_person_ids' => array_values(array_map('intval', array_filter(

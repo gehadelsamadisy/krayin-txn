@@ -441,7 +441,7 @@ controller `Settings\TxnSettingsController`, migration
 | --- | --- |
 | Company & sender | company name, rep name, rep cell, office phone, email accent colour |
 | Services | service list (keywords → category → flow; first match wins), each service's confirmation line, the line for other services |
-| Service area & scheduling | area centre (address looked up once, or lat/lon) and radius, out-of-area message (shown on out-of-area leads with a Copy button), slot times, times to offer, days ahead, minimum notice, visit length, most times per day, max extra drive |
+| Service area & scheduling | area centre (address looked up once, or lat/lon) and radius, out-of-area message (shown on out-of-area leads with a Copy button), slot times, times to offer, days ahead, minimum notice, visit length, most times per day, max extra drive, time zone (a change needs a ticked box: stored appointments keep their clock times); "Ranking & routes (advanced)": road times on/off, most points per road-times request, "near a job" minutes, extra drive counted as equal, road distance factor, average speed, routing server (OSRM), traffic factor outside rush hours, weekday rush hours (from / to / factor rows), drive back to start, days to reuse road routes. Company hours and holidays: Workers > Company schedule |
 | Follow-ups | reminder / final / Lost hours (must go up), hours before an offered time, Lost reason |
 | Emails | every part of the booking-link, reminder (with / without times) and final emails: per email subject, intro, closing; shared header, greeting, button label, plain-text link line, "button doesn't work" line, signature. Placeholders `{first_name}` `{service}` `{rep_name}` `{company}` `{rep_cell}` `{office_phone}` `{call}` `{timezone}`; `**bold**`; empty part = left out; live preview |
 
@@ -452,9 +452,9 @@ The config files and `.env` are the defaults; a value equal to its default is
 not stored; a stored value that fails the checks is ignored. Every field has
 "Reset to default"; each page has "Reset this page". Every change is logged in
 `txn_settings_log` (area `settings:<screen>`) and shown on the page.
-Permissions: `settings.txn.<screen>` (view) and `.edit` (save). Keys,
-passwords, test mode, the lead database, the time zone and route tuning stay
-in `.env` / config on purpose.
+Permissions: `settings.txn.<screen>` (view) and `.edit` (save). APP_KEY and
+Krayin's own database and Redis stay in `.env` on purpose (needed to start). Keys
+and logins are on the Connections screen, the guards on Safety.
 
 ### Lead stages and worker emails
 
@@ -566,7 +566,7 @@ owner used when the person has no sales owner (default 1).
 The Cal.com API key is read from the Laravel environment through
 `config\calcom.php`; never put the key in this patch or browser code. Copy that
 config file to `/var/www/laravel-crm/config/calcom.php`, then configure
-`CALCOM_API_KEY` and, optionally, `CALCOM_DEFAULT_TIMEZONE` in the container
+`CALCOM_API_KEY` in the container (the time zone is set in Settings > TXN Settings > Service area & scheduling)
 environment. Clear Laravel's config cache after changing environment values.
 Customer link creation and email are disabled by default. For a one-contact
 test, set `CALCOM_ALLOW_CUSTOMER_EMAIL=true`,

@@ -2,7 +2,9 @@
 
 /*
  * Settings for suggesting appointment times ("Suggest times" on the booking
- * link page). Same rules as the Python prototype in TXN/Routing/config.py.
+ * link page). These are the DEFAULTS: staff change them in Krayin under
+ * Settings > TXN Settings > Service area & scheduling (time zone, times,
+ * ranking & routes), and the company hours under Workers > Company schedule.
  *
  * Weekdays are numbers: 1 = Monday ... 7 = Sunday (ISO). Times are "HH:MM".
  * After changing this file in the container: php artisan config:clear
@@ -10,6 +12,7 @@
 
 return [
 
+    // Default; staff change it in Settings > TXN Settings > Service area & scheduling.
     'timezone' => 'America/Chicago',
 
     // ------------------------------------------------------------------
@@ -21,8 +24,9 @@ return [
 
     'visit_minutes' => 60,
 
-    // Work hours for workers without their own. A slot is used only if the
-    // visit fits inside them. To be confirmed with the client.
+    // Work hours for workers without their own, until the company hours are
+    // saved under Workers > Company schedule. A slot is used only if the
+    // visit fits inside them.
     'default_work_hours' => [
         1 => ['09:00', '18:00'],
         2 => ['09:00', '18:00'],
@@ -92,42 +96,11 @@ return [
     ],
 
     // ------------------------------------------------------------------
-    // Workers (sample data)
+    // Workers and their jobs
     // ------------------------------------------------------------------
-    //   id          also used in the bookings file "person_id"
-    //   home_lat/lon  where the day starts and ends (office for now)
-    //   priority    1 = preferred; only breaks ties
-    //   work_hours  [weekday => [start, end]]; empty = default_work_hours;
-    //               a weekday missing from a non-empty list = day off
-
-    'workers' => [
-        [
-            'id' => 1,
-            'name' => 'Worker 1',
-            'home_lat' => 30.157301,   // office, 2001 Timberloch Pl, The Woodlands
-            'home_lon' => -95.467582,
-            'priority' => 1,
-            'active' => true,
-            'work_hours' => [],
-        ],
-        [
-            'id' => 2,
-            'name' => 'Worker 2',
-            'home_lat' => 30.157301,
-            'home_lon' => -95.467582,
-            'priority' => 2,
-            'active' => true,
-            'work_hours' => [],
-        ],
-    ],
-
-    // ------------------------------------------------------------------
-    // Existing jobs
-    // ------------------------------------------------------------------
-    // Read from Krayin activities that have a worker_id and are not done.
-    // No longer used (the old demo JSON file):
-
-    'bookings_file' => storage_path('app/slot-finder/demo_bookings.json'),
+    // Workers (any number, with home, priority, services and hours) are
+    // managed in Contacts > Workers; their jobs are the Krayin activities
+    // that have a worker and are not done.
 
     // Geocodio key for turning addresses into coordinates.
     'geocodio_api_key' => env('GEOCODIO_API_KEY'),

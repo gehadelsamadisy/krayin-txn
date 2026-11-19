@@ -81,7 +81,100 @@
                         @include('admin::settings.txn.partials.field-meta', ['key' => $key])
                     </div>
                 @endforeach
+
+                @php($currentTz = $values['slot_finder.timezone'])
+                <div>
+                    <label for="f-timezone" class="mb-1 block text-sm font-medium dark:text-gray-200">{{ $fields['slot_finder.timezone'][2] }}</label>
+                    <select id="f-timezone" name="timezone" class="{{ $input }}" style="max-width: 20rem;" @disabled(! $canEdit)
+                        onchange="document.getElementById('tz-confirm').style.display = this.value === @js($currentTz) ? 'none' : ''">
+                        @foreach ($timezones as $zone => $label)
+                            <option value="{{ $zone }}" @selected(old('timezone', $currentTz) === $zone)>{{ $label }} ({{ $zone }})</option>
+                        @endforeach
+                        @unless (isset($timezones[$currentTz]))
+                            <option value="{{ $currentTz }}" @selected(old('timezone', $currentTz) === $currentTz)>{{ $currentTz }}</option>
+                        @endunless
+                    </select>
+                    <p class="mt-1 text-xs text-gray-500">The times offered, the emails ("Times are in Central Time"), the calendars and the follow-ups use this zone.</p>
+                    <label id="tz-confirm" class="mt-2 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900" style="{{ old('timezone', $currentTz) === $currentTz ? 'display: none;' : '' }}">
+                        <input type="checkbox" name="confirm_timezone" value="1" class="mt-1">
+                        <span>I understand: appointments already in Krayin keep their clock times (a 9:00 AM visit stays 9:00 AM in the new zone). Only change this if the business really moved to another zone.</span>
+                    </label>
+                    @include('admin::settings.txn.partials.field-meta', ['key' => 'slot_finder.timezone'])
+                </div>
             </section>
+
+            @php
+                $advancedHelp = [
+                    'slot_finder.ranking.road_times' => 'On: times are ranked with real road drive times from the routing server. Off: a straight-line estimate (the two settings below it).',
+                    'slot_finder.ranking.max_table_points' => 'If a suggestion needs more points than this, the estimate is used instead. The public OSRM server allows 100.',
+                    'slot_finder.near_job_minutes' => 'On the booking page, a booked job this close to the customer is marked "near".',
+                    'slot_finder.route_fit_tolerance_minutes' => 'Extra driving within this many minutes counts as equal, so a sooner time wins over a later one that saves a few minutes.',
+                    'slot_finder.road_distance_factor' => 'Estimate only: straight-line miles are multiplied by this to get road miles.',
+                    'slot_finder.average_speed_mph' => 'Estimate only: road miles are driven at this speed.',
+                    'slot_finder.routing.osrm_url' => 'Where road routes and drive times come from. The public server (router.project-osrm.org) is for testing; use your own for production.',
+                    'slot_finder.routing.base_traffic_factor' => 'Road drive times are multiplied by this outside the rush hours below.',
+                    'slot_finder.routing.traffic_factors' => 'On weekdays, a drive starting inside one of these periods is multiplied by its factor instead. Tick Remove to delete a row; fill an empty row to add one.',
+                    'slot_finder.routing.return_to_start' => 'Workers > Routes: draw the drive back to the start address after the last visit.',
+                    'slot_finder.routing.cache_days' => 'Road routes already looked up are reused for this many days.',
+                ];
+                $advancedChanged = collect($advanced)->keys()->contains(fn ($key) => isset($saved[$key])) || $errors->any();
+            @endphp
+
+            <details class="flex flex-col gap-3" @if ($advancedChanged) open @endif>
+                <summary class="cursor-pointer text-lg font-semibold dark:text-white">Ranking &amp; routes (advanced)</summary>
+                <p class="mt-1 text-sm text-gray-500">How open times are ranked and how drive times are worked out. The defaults suit most cases.</p>
+
+                @foreach ($advanced as $key => $name)
+                    @php($type = $fields[$key][1])
+                    <div class="mt-4">
+                        @if ($type === 'bool')
+                            <input type="hidden" name="{{ $name }}" value="0">
+                            <label class="flex items-center gap-2 text-sm font-medium dark:text-gray-200">
+                                <input type="checkbox" name="{{ $name }}" value="1" @checked(old($name, $values[$key] ? '1' : '0') === '1') @disabled(! $canEdit)>
+                                {{ $fields[$key][2] }}
+                            </label>
+                        @elseif ($type === 'traffic')
+                            <p class="mb-1 text-sm font-medium dark:text-gray-200">{{ $fields[$key][2] }}</p>
+                            @php
+                                // Saved rows (or what was typed, after an error) + two empty rows to add more.
+                                $rows = is_array(old($name))
+                                    ? array_values(array_map(fn ($row) => [$row['from'] ?? '', $row['to'] ?? '', $row['factor'] ?? ''], array_filter(old($name), fn ($row) => empty($row['remove']))))
+                                    : (array) $values[$key];
+                                $rows = array_merge($rows, [['', '', ''], ['', '', '']]);
+                            @endphp
+                            <table class="text-sm dark:text-gray-200">
+                                <thead>
+                                    <tr class="text-left text-xs text-gray-500">
+                                        <th class="pb-1 pr-2 font-normal">From</th>
+                                        <th class="pb-1 pr-2 font-normal">To</th>
+                                        <th class="pb-1 pr-2 font-normal">Factor</th>
+                                        <th class="pb-1 font-normal">Remove</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($rows as $i => [$from, $to, $factor])
+                                        <tr>
+                                            <td class="pb-1 pr-2"><input type="time" name="{{ $name }}[{{ $i }}][from]" value="{{ $from }}" class="{{ $small }}" aria-label="From" @disabled(! $canEdit)></td>
+                                            <td class="pb-1 pr-2"><input type="time" name="{{ $name }}[{{ $i }}][to]" value="{{ $to }}" class="{{ $small }}" aria-label="To" @disabled(! $canEdit)></td>
+                                            <td class="pb-1 pr-2"><input type="number" step="0.05" min="1" max="3" name="{{ $name }}[{{ $i }}][factor]" value="{{ $factor }}" class="{{ $small }}" style="width: 6rem;" aria-label="Factor" @disabled(! $canEdit)></td>
+                                            <td class="pb-1 text-center"><input type="checkbox" name="{{ $name }}[{{ $i }}][remove]" value="1" aria-label="Remove" @disabled(! $canEdit)></td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        @else
+                            <label for="f-{{ $name }}" class="mb-1 block text-sm font-medium dark:text-gray-200">{{ $fields[$key][2] }}</label>
+                            @if ($type === 'url')
+                                <input id="f-{{ $name }}" type="url" name="{{ $name }}" maxlength="255" value="{{ old($name, $values[$key]) }}" class="{{ $input }}" @disabled(! $canEdit)>
+                            @else
+                                <input id="f-{{ $name }}" type="number" name="{{ $name }}" step="{{ $type === 'decimal' ? '0.05' : '1' }}" min="{{ $fields[$key][3]['min'] }}" max="{{ $fields[$key][3]['max'] }}" value="{{ old($name, $values[$key]) }}" class="{{ $small }}" @disabled(! $canEdit)>
+                            @endif
+                        @endif
+                        <p class="mt-1 text-xs text-gray-500">{{ $advancedHelp[$key] ?? '' }}</p>
+                        @include('admin::settings.txn.partials.field-meta', ['key' => $key])
+                    </div>
+                @endforeach
+            </details>
 
             @if ($canEdit)
                 <div class="flex justify-between gap-3">

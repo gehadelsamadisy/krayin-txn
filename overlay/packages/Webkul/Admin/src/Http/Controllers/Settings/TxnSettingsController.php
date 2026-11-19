@@ -52,6 +52,7 @@ class TxnSettingsController extends Controller
             'emails' => $this->emailExtras(),
             'connections' => $this->connectionExtras($keys),
             'safety' => $this->safetyExtras($keys),
+            'area' => $this->areaExtras(),
             default => [],
         });
     }
@@ -364,7 +365,61 @@ class TxnSettingsController extends Controller
             $values["slot_finder.{$name}"] = $request->input($name);
         }
 
+        // Time zone: stored appointment times are wall-clock times in it, so a
+        // change needs the box ticked (existing appointments keep their clock times).
+        $timezone = (string) $request->input('timezone', config('slot_finder.timezone'));
+        $values['slot_finder.timezone'] = $timezone;
+
+        if ($timezone !== config('slot_finder.timezone') && $request->input('confirm_timezone') !== '1') {
+            $errors[] = 'Time zone: tick the box under it to confirm the change. Nothing was saved.';
+        }
+
+        // Ranking & routes (advanced). On/off boxes send "1", or the hidden "0".
+        // A field not on the form at all is left as it is.
+        foreach (self::AREA_ADVANCED as $key) {
+            $type = TxnSettings::fields()[$key][1];
+            $input = $this->inputName($key);
+
+            if (! $request->has($input)) {
+                continue;
+            }
+
+            $values[$key] = match ($type) {
+                'bool' => $request->input($input) === '1',
+                'traffic' => collect((array) $request->input($input, []))
+                    ->filter(fn ($row) => is_array($row) && empty($row['remove']))
+                    ->map(fn ($row) => [$row['from'] ?? '', $row['to'] ?? '', $row['factor'] ?? ''])
+                    ->values()
+                    ->all(),
+                default => $request->input($input),
+            };
+        }
+
         return [$values, $errors];
+    }
+
+    /** Service area & scheduling: the "Ranking & routes" settings, in screen order. */
+    private const AREA_ADVANCED = [
+        'slot_finder.ranking.road_times',
+        'slot_finder.ranking.max_table_points',
+        'slot_finder.near_job_minutes',
+        'slot_finder.route_fit_tolerance_minutes',
+        'slot_finder.road_distance_factor',
+        'slot_finder.average_speed_mph',
+        'slot_finder.routing.osrm_url',
+        'slot_finder.routing.base_traffic_factor',
+        'slot_finder.routing.traffic_factors',
+        'slot_finder.routing.return_to_start',
+        'slot_finder.routing.cache_days',
+    ];
+
+    /** Service area & scheduling: field names and help for the advanced section. */
+    private function areaExtras(): array
+    {
+        return [
+            'advanced' => collect(self::AREA_ADVANCED)->mapWithKeys(fn ($key) => [$key => $this->inputName($key)])->all(),
+            'timezones' => TxnSettings::TIMEZONES,
+        ];
     }
 
     /** Follow-up hours must go up: reminder, then final, then Lost. */

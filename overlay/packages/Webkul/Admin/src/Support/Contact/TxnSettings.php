@@ -23,7 +23,7 @@ use Throwable;
  * decrypted (APP_KEY changed) is skipped, so .env applies.
  *
  * Not here on purpose: APP_KEY, Krayin's own database and Redis (needed to
- * start), test mode and allowed recipients, time zone, route tuning.
+ * start).
  */
 final class TxnSettings
 {
@@ -103,6 +103,30 @@ final class TxnSettings
 
     public const MAILERS = ['smtp' => 'Brevo SMTP', 'graph' => 'Microsoft 365'];
 
+    /**
+     * Time zones offered on the Service area & scheduling screen => the name
+     * customers read ("Times are in Central Time."). Appointment times are
+     * stored as wall-clock time in this zone, so changing it does not move
+     * existing appointments' clock times.
+     */
+    public const TIMEZONES = [
+        'America/New_York' => 'Eastern Time',
+        'America/Chicago' => 'Central Time',
+        'America/Denver' => 'Mountain Time',
+        'America/Phoenix' => 'Arizona Time',
+        'America/Los_Angeles' => 'Pacific Time',
+        'America/Anchorage' => 'Alaska Time',
+        'Pacific/Honolulu' => 'Hawaii Time',
+    ];
+
+    /** "Central Time" for America/Chicago; the zone's own name for a zone not in the list. */
+    public static function timezoneLabel(?string $timezone = null): string
+    {
+        $timezone ??= (string) config('slot_finder.timezone');
+
+        return self::TIMEZONES[$timezone] ?? $timezone;
+    }
+
     /** Keys put over the config by the last apply()/save(), so the next apply() can undo them. */
     private static array $appliedKeys = [];
 
@@ -156,7 +180,7 @@ final class TxnSettings
     /**
      * Config path => [screen, type, label, options]. Types: text, longtext,
      * int, color, times, services, lines, area, template, secret, choice,
-     * email, host, port. Text options: pattern + hint (checked when not empty).
+     * email, host, port, bool, decimal, url, traffic. Text options: pattern + hint (checked when not empty).
      */
     public static function fields(): array
     {
@@ -179,6 +203,20 @@ final class TxnSettings
             'slot_finder.visit_minutes' => ['area', 'int', 'Visit length (minutes)', ['min' => 15, 'max' => 480]],
             'slot_finder.max_slots_per_day' => ['area', 'int', 'Most times offered on one day', ['min' => 1, 'max' => 20]],
             'slot_finder.max_extra_drive_minutes' => ['area', 'int', 'Max extra drive for a visit (minutes)', ['min' => 5, 'max' => 240]],
+            'slot_finder.timezone' => ['area', 'choice', 'Time zone', ['choices' => self::TIMEZONES]],
+
+            // "Ranking & routes" (advanced) on the same screen.
+            'slot_finder.ranking.road_times' => ['area', 'bool', 'Rank with road drive times', []],
+            'slot_finder.ranking.max_table_points' => ['area', 'int', 'Most points in one road-times request', ['min' => 2, 'max' => 1000]],
+            'slot_finder.near_job_minutes' => ['area', 'int', '"Near a job" within (minutes)', ['min' => 1, 'max' => 240]],
+            'slot_finder.route_fit_tolerance_minutes' => ['area', 'int', 'Extra drive counted as equal (minutes)', ['min' => 0, 'max' => 120]],
+            'slot_finder.road_distance_factor' => ['area', 'decimal', 'Road distance factor', ['min' => 1, 'max' => 3]],
+            'slot_finder.average_speed_mph' => ['area', 'int', 'Average speed (mph)', ['min' => 5, 'max' => 80]],
+            'slot_finder.routing.osrm_url' => ['area', 'url', 'Routing server (OSRM) address', []],
+            'slot_finder.routing.base_traffic_factor' => ['area', 'decimal', 'Traffic factor outside rush hours', ['min' => 1, 'max' => 3]],
+            'slot_finder.routing.traffic_factors' => ['area', 'traffic', 'Rush hours (weekdays)', []],
+            'slot_finder.routing.return_to_start' => ['area', 'bool', 'Draw the drive back to the start address', []],
+            'slot_finder.routing.cache_days' => ['area', 'int', 'Reuse saved road routes for (days)', ['min' => 1, 'max' => 365]],
 
             'follow_ups.reminder_after_hours' => ['follow-ups', 'int', 'Reminder after (hours)', ['min' => 1, 'max' => 720]],
             'follow_ups.final_after_hours' => ['follow-ups', 'int', 'Final email after (hours)', ['min' => 1, 'max' => 720]],
@@ -749,6 +787,70 @@ final class TxnSettings
                     'address' => mb_substr(trim((string) ($value['address'] ?? '')), 0, 200),
                 ];
                 break;
+
+            case 'decimal':
+                if (! is_numeric($value)) {
+                    $errors[] = "{$label}: must be a number like 1.3.";
+                    $value = null;
+                    break;
+                }
+
+                $value = round((float) $value, 2);
+
+                if ($value < $options['min'] || $value > $options['max']) {
+                    $errors[] = "{$label}: must be between {$options['min']} and {$options['max']}.";
+                }
+                break;
+
+            case 'url':
+                $value = is_scalar($value) ? rtrim(trim((string) $value), '/') : '';
+
+                if (! preg_match('#^https?://#i', $value) || ! filter_var($value, FILTER_VALIDATE_URL) || mb_strlen($value) > 255) {
+                    $errors[] = "{$label}: must be a web address starting with http:// or https://.";
+                }
+                break;
+
+            case 'traffic':
+                // Rows [from, to, factor]; empty rows dropped. No rows = the
+                // base factor all day.
+                $rows = [];
+
+                foreach (is_array($value) ? $value : [] as $row) {
+                    $row = array_values((array) $row);
+                    [$from, $to, $factor] = array_map(fn ($part) => trim((string) $part), $row + ['', '', '']);
+
+                    if ($from === '' && $to === '' && $factor === '') {
+                        continue;
+                    }
+
+                    $from = preg_match('/^\d:\d\d$/', $from) ? '0'.$from : $from;
+                    $to = preg_match('/^\d:\d\d$/', $to) ? '0'.$to : $to;
+
+                    if (! preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $from) || ! preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $to) || $from >= $to) {
+                        $errors[] = "{$label}: \"{$from} to {$to}\" must be two times like 07:00 and 09:30, the first one earlier.";
+                    }
+
+                    if (! is_numeric($factor) || $factor < 1 || $factor > 3) {
+                        $errors[] = "{$label}: the factor for {$from} to {$to} must be between 1 and 3.";
+                    }
+
+                    $rows[] = [$from, $to, round((float) $factor, 2)];
+                }
+
+                usort($rows, fn ($a, $b) => strcmp($a[0], $b[0]));
+
+                for ($i = 1; $i < count($rows); $i++) {
+                    if ($rows[$i][0] < $rows[$i - 1][1]) {
+                        $errors[] = "{$label}: {$rows[$i - 1][0]} to {$rows[$i - 1][1]} and {$rows[$i][0]} to {$rows[$i][1]} overlap.";
+                    }
+                }
+
+                if (count($rows) > 8) {
+                    $errors[] = "{$label}: at most 8 rush-hour periods.";
+                }
+
+                $value = $rows;
+                break;
         }
 
         return [$errors, $value];
@@ -762,7 +864,9 @@ final class TxnSettings
             is_bool($value) => $value ? 'yes' : 'no',
             is_scalar($value) => (string) $value,
             isset($value['center_lat']) => trim(($value['address'] ?? '').' ('.$value['center_lat'].', '.$value['center_lon'].'), '.$value['miles'].' mi'),
-            array_is_list($value) && isset($value[0]['category']) => collect($value)->map(fn ($row) => $row['category'].' ('.implode(', ', (array) $row['match']).')')->implode('; '),
+            array_is_list($value) && isset($value[0]) && is_array($value[0]) && array_is_list($value[0]) => collect($value)->map(fn ($row) => "{$row[0]} to {$row[1]} x{$row[2]}")->implode('; '),
+            $value === [] => '(none)',
+            array_is_list($value) && isset($value[0]['category']) =>collect($value)->map(fn ($row) => $row['category'].' ('.implode(', ', (array) $row['match']).')')->implode('; '),
             array_is_list($value) => implode(', ', array_map('strval', $value)),
             default => collect($value)->map(fn ($v, $k) => "{$k}: ".(is_scalar($v) ? $v : json_encode($v)))->implode('; '),
         };

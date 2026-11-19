@@ -189,7 +189,7 @@ class PersonController extends Controller
                 ->values(),
             'askChoices' => $this->bookingLinkService->askChoices($person),
             'addressPlan' => $this->bookingLinkService->addressPlan($person),
-            'defaultTimezone' => config('calcom.default_timezone', 'America/Chicago'),
+            'defaultTimezone' => config('slot_finder.timezone'),
             'calcomConfigured' => filled(config('calcom.api_key')),
             'customerEmailEnabled' => $this->customerLinkAllowed($person),
             'singleTestAttempt' => $this->singleTestAttempt(),
