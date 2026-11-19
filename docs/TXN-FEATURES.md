@@ -126,6 +126,10 @@ switching it back on schedules the steps still ahead; new hours re-time the
 pending ones. **Leads > Scheduled messages** (permission `leads.scheduled`,
 actions `leads.scheduled.edit`) and a Scheduled card on each lead: see the
 entries, **Cancel**, **Send now**, **Change time**.
+**Leads > Waiting for booking** (permission `leads.waiting`): every lead in
+Contacted with when and how the link went out, the times offered, the
+follow-up state and the next scheduled step; filters (sent today / 7 days /
+over 3 days, planned or not), New link, Send next now, Stop follow-ups.
 `php artisan txn:schedule-repair` re-queues a job for every pending entry
 (deploy.sh runs it after migrating). `txn:follow-ups` still sends, by hand,
 follow-ups that are not on the schedule (sent before it, or with the engine off).

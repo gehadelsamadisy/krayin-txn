@@ -46,8 +46,14 @@ return [
     ], [
         'key' => 'leads.scheduled.edit',
         'name' => 'admin::app.acl.edit',
-        'route' => ['admin.leads.scheduled.cancel', 'admin.leads.scheduled.send_now', 'admin.leads.scheduled.retime'],
+        'route' => ['admin.leads.scheduled.cancel', 'admin.leads.scheduled.send_now', 'admin.leads.scheduled.retime', 'admin.leads.waiting.stop'],
         'sort' => 1,
+    ], [
+        // TXN: Leads > Waiting for booking (actions use leads.scheduled.edit).
+        'key' => 'leads.waiting',
+        'name' => 'Waiting for booking',
+        'route' => ['admin.leads.waiting'],
+        'sort' => 7,
     ], [
         // TXN: the "Schedules" / "Routes" sidebar items and header buttons.
         // The pages they open still need the Workers permission.

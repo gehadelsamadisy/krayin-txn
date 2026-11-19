@@ -385,6 +385,11 @@
     .tc-role strong { display: block; margin-bottom: 2px; }
     @media (max-width: 720px) { .tc-roles { grid-template-columns: 1fr; } }
 
+    /* Leads > Waiting for booking: customer | times | follow-ups | actions */
+    .tc-svc.tc-wait { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) 150px; align-items: start; }
+    @media (max-width: 1100px) { .tc-svc.tc-wait { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 640px) { .tc-svc.tc-wait { grid-template-columns: 1fr; } }
+
     /* Pipeline event log (Leads > Event log, Events card) */
     .tc-filters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) auto; gap: 10px; align-items: end; }
     @media (max-width: 900px) { .tc-filters { grid-template-columns: 1fr 1fr; } }

@@ -40,6 +40,13 @@ Route::controller(\Webkul\Admin\Http\Controllers\Lead\ScheduledMessagesControlle
     Route::post('{id}/retime', 'retime')->name('admin.leads.scheduled.retime');
 });
 
+// Leads > Waiting for booking: leads in Contacted, link sent, not booked yet.
+Route::controller(\Webkul\Admin\Http\Controllers\Lead\WaitingController::class)->prefix('leads/waiting')->group(function () {
+    Route::get('', 'index')->name('admin.leads.waiting');
+
+    Route::post('{followUpId}/stop', 'stop')->name('admin.leads.waiting.stop');
+});
+
 // Settings > TXN Settings > Stage rules: which stage each automatic move uses.
 Route::controller(TxnStageRulesController::class)->prefix('settings/txn/stage-rules')->group(function () {
     Route::get('', 'index')->name('admin.settings.txn.stage_rules');

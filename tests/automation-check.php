@@ -374,6 +374,16 @@ try {
     $leadPage = $page(route('admin.leads.view', $lead2->id, false));
     $check('Lead page shows its Events card', $leadPage->getStatusCode() === 200 && str_contains($leadPage->getContent(), 'Events'), 'HTTP '.$leadPage->getStatusCode());
 
+    // Waiting for booking: a contacted test lead with its link and next follow-up.
+    $waitingLead = $makeLead('Gutter repair', $person);
+    $triage->check($waitingLead, true);
+    $wait = $page(route('admin.leads.waiting', [], false));
+    $check('Waiting for booking opens and lists a contacted lead with its next follow-up', $wait->getStatusCode() === 200
+        && str_contains($wait->getContent(), 'Waiting for booking') && str_contains($wait->getContent(), e($waitingLead->title)) && str_contains($wait->getContent(), 'Next:'), 'HTTP '.$wait->getStatusCode());
+    $waitFu = DB::table('txn_follow_ups')->where('lead_id', $waitingLead->id)->whereNull('stopped_at')->first();
+    $kernel->handle(Request::create(route('admin.leads.waiting.stop', $waitFu->id, false), 'POST'));
+    $check('"Stop follow-ups" -> stopped, pending entries cancelled', DB::table('txn_follow_ups')->find($waitFu->id)->stopped_at !== null && $rowsOf($waitingLead, 'pending')->isEmpty());
+
     $saveUrl = route('admin.settings.txn.automation.update', [], false);
     $kernel->handle(Request::create($saveUrl, 'PUT', ['automation__enabled' => '1', 'automation__email__enabled' => '0']));
     $check('Switching an engine on the screen is saved and logged', TxnSettings::isSaved('automation.enabled') && $events('engine_switched')->isNotEmpty());

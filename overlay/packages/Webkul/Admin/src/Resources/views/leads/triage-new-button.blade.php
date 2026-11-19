@@ -3,6 +3,10 @@
 @if (bouncer()->hasPermission('leads.edit'))
     {{-- The header spreads its children apart; the auto margin keeps these next to "Create Lead". --}}
     <div style="margin-left: auto; margin-right: 10px; display: flex; gap: 10px; align-items: center;">
+        @if (bouncer()->hasPermission('leads.waiting'))
+            <a href="{{ route('admin.leads.waiting') }}" class="secondary-button" title="Customers sent a booking link who haven't booked yet: link, times, follow-ups, next step">Waiting</a>
+        @endif
+
         @if (bouncer()->hasPermission('leads.scheduled'))
             <a href="{{ route('admin.leads.scheduled') }}" class="secondary-button" title="Follow-ups planned with their exact times: cancel, send now or move">Scheduled</a>
         @endif
