@@ -1,17 +1,28 @@
-{{-- TXN Settings screens: title, description, save errors. Data: $title, $info. --}}
-<div class="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900">
-    <div>
-        <h1 class="text-xl font-bold dark:text-white">{{ $title }}</h1>
-        <p class="text-sm text-gray-500">{{ $info }} Empty or invalid values are never saved; a setting you reset goes back to its default.</p>
+{{-- TXN Settings screens: header (icon, title, description) and save errors. Data: $title, $info, $screen. Brings the shared styles (.tc). --}}
+@include('admin::settings.txn.partials.tc-styles')
+
+@php
+    $screenIcons = ['company' => 'building', 'services' => 'list', 'area' => 'map', 'follow-ups' => 'bell', 'emails' => 'mail', 'connections' => 'key', 'safety' => 'shield'];
+@endphp
+
+<div class="tc tc-top">
+    <span class="tc-top-icon">@include('admin::settings.txn.partials.icon', ['name' => $screenIcons[$screen ?? ''] ?? 'sliders', 'size' => 22])</span>
+    <div class="tc-top-text">
+        <span class="tc-crumb">TXN Settings</span>
+        <h1>{{ $title }}</h1>
+        <p>{{ $info }} Empty or invalid values are never saved; a setting you reset goes back to its default.</p>
     </div>
     <a href="{{ route('admin.settings.index') }}" class="secondary-button">Back to settings</a>
 </div>
 
 @if ($errors->has('settings'))
-    <div class="rounded-lg border border-red-200 bg-white p-4 text-sm text-red-600 dark:border-red-900 dark:bg-gray-900" role="alert">
-        <p class="font-semibold">Not saved:</p>
-        @foreach ($errors->get('settings') as $message)
-            <p>{{ $message }}</p>
-        @endforeach
+    <div class="tc tc-alert" role="alert">
+        @include('admin::settings.txn.partials.icon', ['name' => 'alert'])
+        <div>
+            <strong>Not saved</strong>
+            @foreach ($errors->get('settings') as $message)
+                <div>{{ $message }}</div>
+            @endforeach
+        </div>
     </div>
 @endif
