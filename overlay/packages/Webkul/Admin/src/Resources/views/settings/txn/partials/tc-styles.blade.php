@@ -274,5 +274,115 @@
     .tc-diff-new { padding: 1px 8px; border-radius: 6px; background: var(--tc-ok-soft); color: var(--tc-ok); overflow-wrap: anywhere; }
     .tc-empty { margin: 0; color: var(--tc-muted); font-size: 13px; }
     @media (prefers-reduced-motion: reduce) { .tc-chevron, .tc-svc, .tc-meter i { transition: none; } }
+
+    /* ---- Workers, booking link, stage rules, import result ---- */
+    .tc-top-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tc-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .tc-stat { display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 11px; border-radius: 999px; background: var(--tc-panel); border: 1px solid var(--tc-line); font-size: 12px; color: var(--tc-muted); }
+    .tc-stat b { color: var(--tc-ink); font-size: 14px; }
+
+    .tc-table-wrap { overflow-x: auto; }
+    .tc-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    .tc-table th { text-align: left; padding: 10px 16px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--tc-muted); background: var(--tc-band); border-bottom: 1px solid var(--tc-line); white-space: nowrap; }
+    .tc-table td { padding: 12px 16px; border-bottom: 1px solid var(--tc-line); vertical-align: middle; }
+    .tc-table tbody tr:last-child td { border-bottom: 0; }
+    .tc-table tbody tr:hover td { background: var(--tc-band); }
+    .tc-table tr.is-inactive td { opacity: .6; }
+    .tc-right { text-align: right; }
+
+    .tc-avatar { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--tc-brand); color: #fff; font-size: 13px; font-weight: 700; letter-spacing: .02em; box-shadow: 0 0 0 3px var(--tc-panel), 0 0 0 4px var(--tc-line); }
+    .tc-avatar.is-lg { width: 46px; height: 46px; font-size: 15px; }
+    .tc-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .tc-who strong { display: block; font-size: 14px; }
+    .tc-sub { display: block; color: var(--tc-muted); font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+
+    .tc-week { display: inline-flex; gap: 3px; }
+    .tc-day { width: 27px; padding: 3px 0; border-radius: 6px; text-align: center; font-size: 10.5px; font-weight: 700; background: var(--tc-ok-soft); color: var(--tc-ok); cursor: default; }
+    .tc-day.is-off { background: var(--tc-band); color: var(--tc-muted); text-decoration: line-through; }
+
+    .tc-status { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .tc-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .tc-status.is-on { background: var(--tc-ok-soft); color: var(--tc-ok); }
+    .tc-status.is-off { background: var(--tc-band); color: var(--tc-muted); border: 1px solid var(--tc-line); }
+    .tc-status.is-warn { background: var(--tc-warn-soft); color: var(--tc-warn); }
+    .tc-prio { display: inline-grid; place-items: center; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 8px; background: var(--tc-band); border: 1px solid var(--tc-line); font-size: 12.5px; font-weight: 700; }
+    .tc-prio.is-top { background: var(--tc-brand-soft); border-color: transparent; color: var(--tc-brand); }
+
+    .tc-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--tc-line); border-radius: 8px; background: var(--tc-panel); color: var(--tc-ink); font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer; text-decoration: none; transition: border-color .15s, color .15s; }
+    .tc-btn:hover { border-color: var(--tc-brand); color: var(--tc-brand); }
+    .tc-btn.is-danger { color: var(--tc-bad); }
+    .tc-btn.is-danger:hover { border-color: var(--tc-bad); background: var(--tc-bad-soft); }
+    .tc-empty-state { padding: 44px 20px; text-align: center; color: var(--tc-muted); }
+    .tc-empty-state strong { display: block; margin: 10px 0 4px; color: var(--tc-ink); font-size: 15px; }
+
+    /* Weekly hours: one row per day */
+    .tc-days { display: flex; flex-direction: column; gap: 6px; }
+    .tc-dayrow { display: grid; grid-template-columns: 120px auto auto auto 1fr; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--tc-line); border-radius: 10px; background: var(--tc-panel); }
+    .tc-dayrow strong { font-size: 13.5px; }
+    .tc-dayrow .tc-input { width: auto; padding: 6px 9px; }
+    .tc-dayrow .tc-status { justify-self: end; }
+    .tc-dayrow.is-off { background: var(--tc-band); }
+    @media (max-width: 640px) { .tc-dayrow { grid-template-columns: 1fr 1fr; } .tc-dayrow strong { grid-column: 1 / -1; } .tc-dayrow .tc-arrow { display: none; } }
+
+    /* Entries that can be added/removed (time off, holidays) */
+    .tc-entry { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px 16px; border: 1px solid var(--tc-line); border-left: 4px solid var(--tc-warn); border-radius: 10px; background: var(--tc-panel); }
+    .tc-entry.is-holiday { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; border-left-color: var(--tc-brand); align-items: end; }
+    .tc-entry .tc-entry-foot { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+    @media (max-width: 720px) { .tc-entry, .tc-entry.is-holiday { grid-template-columns: 1fr; } }
+
+    .tc-colorpick { display: flex; align-items: center; gap: 10px; }
+    .tc-colorpick input[type=color] { width: 44px; height: 38px; padding: 2px; border: 1px solid var(--tc-line); border-radius: 8px; background: var(--tc-field); cursor: pointer; flex: 0 0 auto; }
+    .tc-colorpick .tc-input { max-width: 140px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; }
+
+    /* Coloured notes */
+    .tc-box { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 10px; font-size: 13px; line-height: 1.5; border: 1px solid; }
+    .tc-box svg { flex: 0 0 auto; margin-top: 2px; }
+    .tc-box.is-info { background: var(--tc-brand-soft); border-color: transparent; color: var(--tc-ink); }
+    .tc-box.is-info svg { color: var(--tc-brand); }
+    .tc-box.is-warn { background: var(--tc-warn-soft); border-color: var(--tc-warn); color: var(--tc-ink); }
+    .tc-box.is-warn svg { color: var(--tc-warn); }
+    .tc-box.is-ok { background: var(--tc-ok-soft); border-color: var(--tc-ok); color: var(--tc-ink); }
+    .tc-box.is-ok svg { color: var(--tc-ok); }
+    .tc-box.is-bad { background: var(--tc-bad-soft); border-color: var(--tc-bad); color: var(--tc-ink); }
+    .tc-box.is-bad svg { color: var(--tc-bad); }
+    .tc-box ul { margin: 4px 0 0 18px; list-style: disc; }
+
+    /* Booking link: ask list, suggestion result, draft link */
+    .tc-ask { border: 1px solid var(--tc-line); border-radius: 10px; overflow: hidden; }
+    .tc-ask label { display: flex; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; font-size: 13.5px; }
+    .tc-ask label + label { border-top: 1px solid var(--tc-line); }
+    .tc-ask label:hover { background: var(--tc-band); }
+    .tc-ask input { accent-color: var(--tc-brand); width: 16px; height: 16px; }
+    .tc-ask-name { min-width: 130px; font-weight: 600; }
+    .tc-ask-current { margin-left: auto; color: var(--tc-muted); font-size: 12.5px; text-align: right; overflow-wrap: anywhere; }
+    .tc-suggest { display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
+    .tc-suggest:empty { display: none; }
+    .tc-option { padding: 12px 14px; border: 1px solid var(--tc-line); border-left: 4px solid var(--tc-opt, var(--tc-brand)); border-radius: 10px; background: var(--tc-panel); }
+    .tc-option-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+    .tc-option-head b { font-size: 14px; }
+    .tc-option ul { margin: 8px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--tc-muted); }
+    .tc-option li { padding: 2px 0; font-variant-numeric: tabular-nums; }
+    .tc-option li.is-new { color: var(--tc-ok); font-weight: 700; }
+    .tc-late { color: var(--tc-bad); font-weight: 700; }
+    .tc-linkbox { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .tc-linkbox .tc-input { flex: 1 1 260px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+    .tc-slots { display: flex; flex-direction: column; gap: 8px; }
+    .tc-slot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--tc-line); border-radius: 10px; background: var(--tc-band); }
+    .tc-slot .tc-input { width: auto; }
+    .tc-slot input[type=datetime-local] { flex: 1 1 220px; }
+    .tc-slot-num { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--tc-brand-soft); color: var(--tc-brand); font-size: 12px; font-weight: 700; counter-increment: tc-slot; }
+    .tc-slot-num::before { content: counter(tc-slot); }
+    .tc-slots { counter-reset: tc-slot; }
+
+    /* Stage rules */
+    .tc-stage { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto minmax(0, 1.2fr); align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--tc-line); border-radius: 10px; background: var(--tc-panel); }
+    .tc-stage-pos { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--tc-band); color: var(--tc-muted); font-size: 12px; font-weight: 700; }
+    .tc-stage-name { font-weight: 600; }
+    .tc-stage.is-closing { background: var(--tc-band); }
+    @media (max-width: 720px) { .tc-stage { grid-template-columns: 34px 1fr; } .tc-stage > :nth-child(n+3) { grid-column: 1 / -1; } }
+    .tc-roles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .tc-role { padding: 12px 14px; border: 1px solid var(--tc-line); border-radius: 10px; background: var(--tc-band); font-size: 13px; line-height: 1.45; }
+    .tc-role strong { display: block; margin-bottom: 2px; }
+    @media (max-width: 720px) { .tc-roles { grid-template-columns: 1fr; } }
 </style>
 @endPushOnce

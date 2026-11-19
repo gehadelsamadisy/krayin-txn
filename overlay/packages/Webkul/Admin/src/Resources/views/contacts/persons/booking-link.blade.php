@@ -24,298 +24,289 @@
         $workerNames = $workers->pluck('name', 'id');
     @endphp
 
-    <div class="mx-auto max-w-3xl rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-        <div class="mb-6">
-            <h1 class="text-xl font-semibold dark:text-white">Send a home-visit booking link</h1>
-            <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                For {{ $person->name }}. The customer will choose one of the exact 60-minute slots you enter.
-            </p>
+    @include('admin::settings.txn.partials.tc-styles')
 
-            @if ($lead)
-                <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                    Lead: <a href="{{ route('admin.leads.view', $lead->id) }}" class="text-blue-600 underline">{{ $lead->title }}</a>.
-                    The booking goes to this lead only.
+    <div class="mx-auto flex w-full max-w-4xl flex-col gap-4">
+        <div class="tc tc-top">
+            <span class="tc-top-icon">@include('admin::settings.txn.partials.icon', ['name' => 'link', 'size' => 22])</span>
+            <div class="tc-top-text">
+                <span class="tc-crumb">Booking link</span>
+                <h1>Send a home-visit booking link</h1>
+                <p>
+                    For <strong style="color: var(--tc-ink);">{{ $person->name }}</strong>. The customer chooses one of the exact 60-minute times you enter.
+                    @if ($lead)
+                        Lead: <a href="{{ route('admin.leads.view', $lead->id) }}" style="color: var(--tc-brand); font-weight: 600;">{{ $lead->title }}</a> (the booking goes to this lead only).
+                    @endif
                 </p>
+            </div>
+            <a href="{{ $lead ? route('admin.leads.view', $lead->id) : route('admin.contacts.persons.view', $person->id) }}" class="secondary-button">Back</a>
+        </div>
+
+        <div class="tc flex flex-col gap-3">
+            @if (! $calcomConfigured)
+                <div class="tc-box is-warn">@include('admin::settings.txn.partials.icon', ['name' => 'alert'])<div>Cal.com is not configured yet. Add its API key in Settings &gt; TXN Settings &gt; Connections before sending.</div></div>
+            @endif
+
+            @if (! $customerEmailEnabled)
+                <div class="tc-box is-info">@include('admin::settings.txn.partials.icon', ['name' => 'info'])
+                    <div>
+                        @if (config('txn.guard_calcom', true))
+                            Customer booking-link creation and email are disabled. No link will be created or sent from this form.
+                        @else
+                            This contact has no email address. Add one to create and send a booking link.
+                        @endif
+                    </div>
+                </div>
+            @elseif (! config('txn.guard_calcom', true))
+                <div class="tc-box is-warn">@include('admin::settings.txn.partials.icon', ['name' => 'alert'])
+                    <div>"Create link" makes a real Cal.com link and shows it here; nothing is emailed until you press "Email this link". The email goes to the customer.</div>
+                </div>
+            @else
+                <div class="tc-box is-info">@include('admin::settings.txn.partials.icon', ['name' => 'shield'])
+                    <div>
+                        Test mode: authorized for this contact and test recipient only. "Create link" makes a real (hidden) Cal.com link and shows it here; nothing is emailed until you press "Email this link".
+                        @if ($singleTestAttempt)
+                            Only one email is allowed.
+                        @endif
+                    </div>
+                </div>
+            @endif
+
+            @if ($errors->any())
+                <div role="alert" class="tc-alert">
+                    @include('admin::settings.txn.partials.icon', ['name' => 'alert'])
+                    <div>
+                        <strong>Not done</strong>
+                        @foreach ($errors->all() as $error)
+                            <div>{{ $error }}</div>
+                        @endforeach
+                    </div>
+                </div>
             @endif
         </div>
 
-        @if (! $calcomConfigured)
-            <div class="mb-5 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                Cal.com is not configured yet. Set <code>CALCOM_API_KEY</code> in the Krayin environment before sending.
-            </div>
-        @endif
-
-        @if (! $customerEmailEnabled)
-            <div class="mb-5 rounded border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">
-                @if (config('txn.guard_calcom', true))
-                    Customer booking-link creation and email are disabled. No link will be created or sent from this form.
-                @else
-                    This contact has no email address. Add one to create and send a booking link.
-                @endif
-            </div>
-        @elseif (! config('txn.guard_calcom', true))
-            <div class="mb-5 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                "Create link" makes a real Cal.com link and shows it here; nothing is emailed until you press
-                "Email this link". The email goes to the customer.
-            </div>
-        @else
-            <div class="mb-5 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                Authorized for this contact and test recipient only. "Create link" makes a real (hidden) Cal.com link
-                and shows it here; nothing is emailed until you press "Email this link".
-                @if ($singleTestAttempt)
-                    Only one email is allowed.
-                @endif
-            </div>
-        @endif
-
         @if ($draftLink)
-            <div class="mb-5 rounded border border-green-300 bg-green-50 p-4 text-sm text-green-900">
-                <p class="font-medium">Link created &mdash; not sent yet</p>
+            <section class="tc tc-card tc-state-ready">
+                @include('admin::settings.txn.partials.card-head', [
+                    'icon' => 'check',
+                    'title' => 'Link created, not sent yet',
+                    'text' => 'Check the email below, edit the text if needed, then send. Creating a new link further down replaces this one.',
+                ])
+                <div class="tc-body">
+                    <div class="tc-linkbox">
+                        <input id="draft-link" type="text" readonly value="{{ $draftLink['url'] }}" class="tc-input">
+                        <a href="{{ $draftLink['url'] }}" target="_blank" rel="noopener noreferrer" class="tc-btn">Open</a>
+                        <button type="button" class="tc-btn" onclick="navigator.clipboard.writeText(document.getElementById('draft-link').value); this.textContent = 'Copied';">Copy</button>
+                    </div>
 
-                <div class="mt-2 flex flex-wrap items-center gap-2">
-                    <input
-                        id="draft-link"
-                        type="text"
-                        readonly
-                        value="{{ $draftLink['url'] }}"
-                        class="min-w-0 flex-1 rounded border border-green-300 bg-white px-3 py-2 text-sm text-gray-900"
-                    >
-                    <a href="{{ $draftLink['url'] }}" target="_blank" rel="noopener noreferrer" class="secondary-button">Open</a>
-                    <button type="button" class="secondary-button" onclick="navigator.clipboard.writeText(document.getElementById('draft-link').value); this.textContent = 'Copied';">Copy</button>
-                </div>
-
-                <p class="mt-2 text-xs">Times in this link ({{ $draftLink['timezone'] }}); the worker of the time the customer books gets the visit:</p>
-                <p id="draft-times-changed" class="mt-1 text-xs font-medium" style="display: none; color: #b45309;">
-                    The times below were changed on the form. Sending the email updates the link to these times.
-                </p>
-                <ul id="draft-times" class="mt-1 list-inside list-disc text-xs">
-                    @foreach ($draftLink['slot_workers'] ?? array_fill_keys($draftLink['slots'], null) as $slot => $workerId)
-                        <li>
-                            {{ \Carbon\CarbonImmutable::createFromFormat('!Y-m-d\TH:i', $slot)->format('D M j, g:i A') }}
-                            &mdash; {{ $workerNames[$workerId] ?? 'no worker' }}
-                        </li>
-                    @endforeach
-                </ul>
-
-                {{-- The email that goes with the link: check it, edit the text, then send. --}}
-                <form method="POST" action="{{ route('admin.contacts.persons.booking_link.send', $person->id) }}" onsubmit="txnCopySlots(this)" class="mt-3 space-y-3 border-t border-green-200 pt-3 text-gray-900"
-                    data-draft-slots="{{ json_encode(collect($draftLink['slot_workers'] ?? [])->map(fn ($w) => (string) $w)->sortKeys()->all()) }}">
-                    @csrf
-                    {{-- The form's current times (and workers), copied in on submit. --}}
-                    <div class="txn-send-slots"></div>
-
-                    <p class="text-sm font-medium text-green-900">The email &mdash; edit the text if needed, then send</p>
-
-                    <div class="flex flex-wrap items-center gap-2">
-                        <label for="send-email" class="w-16 text-xs font-medium text-green-900">To</label>
-                        <select id="send-email" name="email" required class="rounded border border-gray-300 px-2 py-1 text-sm text-gray-900">
-                            @foreach ($emails as $address)
-                                <option value="{{ $address }}">{{ $address }}</option>
+                    <div>
+                        <span class="tc-label">Times in this link ({{ $draftLink['timezone'] }})</span>
+                        <p class="tc-help">The worker of the time the customer books gets the visit.</p>
+                        <p id="draft-times-changed" class="tc-help" style="display: none; color: var(--tc-warn); font-weight: 600;">
+                            The times below were changed on the form. Sending the email updates the link to these times.
+                        </p>
+                        <ul id="draft-times" class="tc-chips" style="margin-top: 6px; list-style: none; padding: 0;">
+                            @foreach ($draftLink['slot_workers'] ?? array_fill_keys($draftLink['slots'], null) as $slot => $workerId)
+                                <li class="tc-chip">
+                                    {{ \Carbon\CarbonImmutable::createFromFormat('!Y-m-d\TH:i', $slot)->format('D M j, g:i A') }}
+                                    &mdash; {{ $workerNames[$workerId] ?? 'no worker' }}
+                                </li>
                             @endforeach
-                        </select>
+                        </ul>
                     </div>
 
-                    <div class="flex flex-wrap items-center gap-2">
-                        <label for="email-subject" class="w-16 text-xs font-medium text-green-900">Subject</label>
-                        <input id="email-subject" name="subject" type="text" required maxlength="200" value="{{ $email['subject'] }}"
-                            data-default="{{ $email['subject'] }}" oninput="txnEmailPreview()"
-                            class="min-w-0 flex-1 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900">
-                    </div>
+                    {{-- The email that goes with the link: check it, edit the text, then send. --}}
+                    <form method="POST" action="{{ route('admin.contacts.persons.booking_link.send', $person->id) }}" onsubmit="txnCopySlots(this)" class="tc-form" style="padding-top: 16px; border-top: 1px dashed var(--tc-line);"
+                        data-draft-slots="{{ json_encode(collect($draftLink['slot_workers'] ?? [])->map(fn ($w) => (string) $w)->sortKeys()->all()) }}">
+                        @csrf
+                        {{-- The form's current times (and workers), copied in on submit. --}}
+                        <div class="txn-send-slots"></div>
 
-                    <div>
-                        <label for="email-intro" class="text-xs font-medium text-green-900">Message (before the times)</label>
-                        <textarea id="email-intro" name="intro" rows="4" required maxlength="3000"
-                            data-default="{{ $email['intro'] }}" oninput="txnEmailPreview()"
-                            class="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900">{{ $email['intro'] }}</textarea>
-                    </div>
+                        <div class="tc-split">
+                            <div class="tc-form">
+                                <div class="tc-field">
+                                    <label for="send-email" class="tc-label">To</label>
+                                    <select id="send-email" name="email" required class="tc-input">
+                                        @foreach ($emails as $address)
+                                            <option value="{{ $address }}">{{ $address }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
 
-                    <div>
-                        <label for="email-closing" class="text-xs font-medium text-green-900">Closing note (after the button; can be empty)</label>
-                        <textarea id="email-closing" name="closing" rows="3" maxlength="3000"
-                            data-default="{{ $email['closing'] }}" oninput="txnEmailPreview()"
-                            class="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900">{{ $email['closing'] }}</textarea>
-                    </div>
+                                <div class="tc-field">
+                                    <label for="email-subject" class="tc-label">Subject</label>
+                                    <input id="email-subject" name="subject" type="text" required maxlength="200" value="{{ $email['subject'] }}"
+                                        data-default="{{ $email['subject'] }}" oninput="txnEmailPreview()" class="tc-input">
+                                </div>
 
-                    <p class="text-xs text-green-900">
-                        The greeting, the times, the button and the signature are added automatically, so they always match the link
-                        (their wording is in Settings &gt; TXN Settings &gt; Emails). Put **two stars** around words to make them bold.
-                        <button type="button" class="underline" onclick="txnEmailReset()">Reset the text</button>
-                    </p>
+                                <div class="tc-field">
+                                    <label for="email-intro" class="tc-label">Message <span class="tc-sublabel">(before the times)</span></label>
+                                    <textarea id="email-intro" name="intro" rows="5" required maxlength="3000"
+                                        data-default="{{ $email['intro'] }}" oninput="txnEmailPreview()" class="tc-input">{{ $email['intro'] }}</textarea>
+                                </div>
 
-                    <div>
-                        <p class="mb-1 text-xs font-medium text-green-900">Preview</p>
-                        <iframe id="email-preview" title="Email preview" srcdoc="{{ $emailPreview }}" onload="window.txnEmailPreview && txnEmailPreview()"
-                            class="w-full rounded border border-gray-300 bg-white" style="height: 640px;"></iframe>
-                    </div>
+                                <div class="tc-field">
+                                    <label for="email-closing" class="tc-label">Closing note <span class="tc-sublabel">(after the button; can be empty)</span></label>
+                                    <textarea id="email-closing" name="closing" rows="3" maxlength="3000"
+                                        data-default="{{ $email['closing'] }}" oninput="txnEmailPreview()" class="tc-input">{{ $email['closing'] }}</textarea>
+                                </div>
 
-                    <button type="submit" class="primary-button" @disabled(! $emails || ! $customerEmailEnabled)>Email this link</button>
-                </form>
+                                <p class="tc-note">
+                                    @include('admin::settings.txn.partials.icon', ['name' => 'info', 'size' => 15])
+                                    <span>
+                                        The greeting, the times, the button and the signature are added automatically, so they always match the link
+                                        (their wording is in Settings &gt; TXN Settings &gt; Emails). Put **two stars** around words to make them bold.
+                                        <button type="button" class="tc-link" onclick="txnEmailReset()">Reset the text</button>
+                                    </span>
+                                </p>
 
-                <p class="mt-2 text-xs">Creating a new link below replaces this one.</p>
-            </div>
+                                <button type="submit" class="primary-button" style="align-self: flex-start;" @disabled(! $emails || ! $customerEmailEnabled)>Email this link</button>
+                            </div>
+
+                            <div class="tc-field">
+                                <span class="tc-preview-label">Preview</span>
+                                <iframe id="email-preview" title="Email preview" srcdoc="{{ $emailPreview }}" onload="window.txnEmailPreview && txnEmailPreview()" class="tc-frame" style="height: 640px;"></iframe>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </section>
         @endif
 
-        @if ($errors->any())
-            <div role="alert" class="mb-5 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">
-                <ul class="list-inside list-disc">
-                    @foreach ($errors->all() as $error)
-                        <li>{{ $error }}</li>
-                    @endforeach
-                </ul>
-            </div>
-        @endif
-
-        <form method="POST" action="{{ route('admin.contacts.persons.booking_link.create_link', $person->id) }}" class="space-y-6">
+        <form method="POST" action="{{ route('admin.contacts.persons.booking_link.create_link', $person->id) }}" class="tc tc-form">
             @csrf
 
             @if ($lead)
                 <input type="hidden" name="lead_id" value="{{ $lead->id }}">
             @endif
 
-            <div>
-                <label for="email" class="mb-1 block text-sm font-medium dark:text-white">Customer email</label>
-
-                @if ($emails)
-                    <select id="email" name="email" required class="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                        @foreach ($emails as $email)
-                            <option value="{{ $email }}" @selected(old('email', $emails[0]) === $email)>{{ $email }}</option>
-                        @endforeach
-                    </select>
-                @else
-                    <p class="text-sm text-red-600">This Person has no valid email address. Add one before sending a booking link.</p>
-                @endif
-
-            </div>
-
-            <div>
-                <label for="timezone" class="mb-1 block text-sm font-medium dark:text-white">Time zone for these slots</label>
-                <input
-                    id="timezone"
-                    name="timezone"
-                    type="text"
-                    required
-                    value="{{ old('timezone', $defaultTimezone) }}"
-                    placeholder="{{ $defaultTimezone }}"
-                    class="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                >
-                <p class="mt-1 text-xs text-gray-500">Use an IANA time zone. The company's zone (Settings &gt; TXN Settings &gt; Service area &amp; scheduling): {{ $defaultTimezone }}.</p>
-
-            </div>
-
-            <fieldset class="rounded border border-gray-200 p-4 dark:border-gray-800">
-                <legend class="px-1 text-sm font-medium dark:text-white">Suggest times automatically</legend>
-                <p class="mb-3 text-xs text-gray-500">
-                    Picks the best times for this customer from the workers' schedules and fills them in below.
-                    Nothing is created in Cal.com and nothing is sent.
-                </p>
-
-                <div class="grid gap-3 sm:grid-cols-2">
-                    <div>
-                        <label for="suggest-address" class="mb-1 block text-xs font-medium dark:text-white">Test address (optional)</label>
-                        <input
-                            id="suggest-address"
-                            type="text"
-                            placeholder="Contact's address, or e.g. 123 Main St, Katy, TX 77494"
-                            class="w-full rounded border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                        >
-                    </div>
-
-                    <div>
-                        <label for="suggest-now" class="mb-1 block text-xs font-medium dark:text-white">Pretend "now" (optional, {{ \Webkul\Admin\Support\Contact\TxnSettings::timezoneLabel() }})</label>
-                        <input
-                            id="suggest-now"
-                            type="datetime-local"
-                            class="w-full rounded border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                        >
-                    </div>
-                </div>
-
-                @if ($serviceTypes->isNotEmpty())
-                    <div class="mt-3">
-                        <label for="suggest-service" class="mb-1 block text-xs font-medium dark:text-white">Service needed (optional)</label>
-                        <select id="suggest-service" class="w-full rounded border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                            <option value="">No service specified</option>
-                            @foreach ($serviceTypes as $service)
-                                <option value="{{ $service }}">{{ $service }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                @endif
-
-                <button type="button" id="suggest-button" onclick="suggestBookingSlots()" class="secondary-button mt-3">Suggest times</button>
-
-                <div id="suggest-result" class="mt-3 hidden text-sm dark:text-white"></div>
-            </fieldset>
-
-            <fieldset>
-                <legend class="mb-2 text-sm font-medium dark:text-white">Available appointment slots (60 minutes each, starting on the hour)</legend>
-                <p class="mb-2 text-xs text-gray-500">Each time has its own worker. The customer picks a time; that time's worker gets the visit when Cal.com syncs the booking. Suggest times fills in both; for a time you type, choose its worker.</p>
-
-                @if ($workers->isEmpty())
-                    <p class="mb-2 text-sm text-red-600">No active worker with a geocoded start address is available. Register and locate a worker first.</p>
-                @endif
-
-                <div id="booking-slots" class="space-y-2">
-                    @foreach ($oldSlots as $index => $slot)
-                        <div class="booking-slot-row flex items-center gap-2">
-                            <input
-                                type="datetime-local"
-                                name="slots[]"
-                                value="{{ $slot }}"
-                                step="3600"
-                                required
-                                class="min-w-0 flex-1 rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                            >
-                            <select name="slot_workers[]" required class="rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                                <option value="">Worker</option>
-                                @foreach ($workers as $worker)
-                                    <option value="{{ $worker->id }}" @selected((string) ($oldSlotWorkers[$index] ?? '') === (string) $worker->id)>{{ $worker->name }}</option>
-                                @endforeach
-                            </select>
-                            <button type="button" onclick="removeBookingSlot(this)" class="secondary-button">Remove</button>
-                        </div>
-                    @endforeach
-                </div>
-                @error('slot_workers') <p class="mt-1 text-sm text-red-600" role="alert">{{ $message }}</p> @enderror
-
-                <button type="button" onclick="addBookingSlot()" class="secondary-button mt-3">Add another time</button>
-
-            </fieldset>
-
-            <fieldset>
-                <legend class="mb-2 text-sm font-medium dark:text-white">Ask the customer for</legend>
-
-                <p class="mb-2 text-xs text-gray-500">Missing or unusable details are ticked. Tick any other detail to ask for it again (e.g. a wrong number), or untick what the booking page shouldn't ask. Answers replace the stored values when the booking syncs. Name and email are always on the booking page.</p>
-
-                @if ($addressPlan['has_street'])
-                    <p class="mb-2 text-xs text-gray-500">Visit address on file: {{ $addressPlan['location'] }}.</p>
-                @endif
-
-                <div class="txn-ask-list">
-                    @foreach ($askChoices as $choice)
-                        <label class="txn-ask-row">
-                            <input type="checkbox" name="fields[]" value="{{ $choice['code'] }}" @checked(old('_token') === null ? $choice['ticked'] : in_array($choice['code'], $oldFields, true))>
-                            <span class="txn-ask-name">{{ $choice['name'] }}</span>
-                            @if ($choice['why'])
-                                <span class="txn-ask-badge">{{ $choice['why'] }}</span>
+            {{-- Who --}}
+            <section class="tc-card is-plain">
+                @include('admin::settings.txn.partials.card-head', ['icon' => 'mail', 'title' => 'Customer', 'text' => 'Where the link goes, and the time zone of the times.'])
+                <div class="tc-body">
+                    <div class="tc-grid">
+                        <div class="tc-field">
+                            <label for="email" class="tc-label">Customer email</label>
+                            @if ($emails)
+                                <select id="email" name="email" required class="tc-input">
+                                    @foreach ($emails as $email)
+                                        <option value="{{ $email }}" @selected(old('email', $emails[0]) === $email)>{{ $email }}</option>
+                                    @endforeach
+                                </select>
+                            @else
+                                <p class="tc-help" style="color: var(--tc-bad);">This Person has no valid email address. Add one before sending a booking link.</p>
                             @endif
-                            <span class="txn-ask-current">{{ $choice['current'] ?? '—' }}</span>
-                        </label>
-                    @endforeach
+                        </div>
+
+                        <div class="tc-field">
+                            <label for="timezone" class="tc-label">Time zone for these times</label>
+                            <input id="timezone" name="timezone" type="text" required value="{{ old('timezone', $defaultTimezone) }}" placeholder="{{ $defaultTimezone }}" class="tc-input">
+                            <p class="tc-help">An IANA time zone. The company's zone (Settings &gt; TXN Settings &gt; Service area &amp; scheduling): {{ $defaultTimezone }}.</p>
+                        </div>
+                    </div>
                 </div>
-            </fieldset>
+            </section>
 
-            <div class="flex items-center gap-3 border-t border-gray-200 pt-5 dark:border-gray-800">
-                <button
-                    type="submit"
-                    class="primary-button"
-                    @disabled(! $calcomConfigured || ! $customerEmailEnabled)
-                >
-                    Create link (no email yet)
-                </button>
+            {{-- Suggest times --}}
+            <section class="tc-card is-plain">
+                @include('admin::settings.txn.partials.card-head', ['icon' => 'sparkle', 'title' => 'Suggest times automatically', 'text' => 'Picks the best times for this customer from the workers\' schedules and fills them in below. Nothing is created in Cal.com and nothing is sent.'])
+                <div class="tc-body">
+                    <div class="tc-grid">
+                        <div class="tc-field">
+                            <label for="suggest-address" class="tc-label">Test address <span class="tc-sublabel">(optional)</span></label>
+                            <input id="suggest-address" type="text" placeholder="Contact's address, or e.g. 123 Main St, Katy, TX 77494" class="tc-input">
+                        </div>
 
-                <a href="{{ $lead ? route('admin.leads.view', $lead->id) : route('admin.contacts.persons.view', $person->id) }}" class="secondary-button">Cancel</a>
-            </div>
+                        <div class="tc-field">
+                            <label for="suggest-now" class="tc-label">Pretend "now" <span class="tc-sublabel">(optional, {{ \Webkul\Admin\Support\Contact\TxnSettings::timezoneLabel() }})</span></label>
+                            <input id="suggest-now" type="datetime-local" class="tc-input">
+                        </div>
+
+                        @if ($serviceTypes->isNotEmpty())
+                            <div class="tc-field">
+                                <label for="suggest-service" class="tc-label">Service needed <span class="tc-sublabel">(optional)</span></label>
+                                <select id="suggest-service" class="tc-input">
+                                    <option value="">No service specified</option>
+                                    @foreach ($serviceTypes as $service)
+                                        <option value="{{ $service }}">{{ $service }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        @endif
+                    </div>
+
+                    <button type="button" id="suggest-button" onclick="suggestBookingSlots()" class="tc-test" style="align-self: flex-start;">
+                        @include('admin::settings.txn.partials.icon', ['name' => 'sparkle', 'size' => 14]) Suggest times
+                    </button>
+
+                    <div id="suggest-result" class="tc-suggest"></div>
+                </div>
+            </section>
+
+            {{-- Times --}}
+            <section class="tc-card is-plain">
+                @include('admin::settings.txn.partials.card-head', [
+                    'icon' => 'calendar',
+                    'title' => 'Appointment times',
+                    'text' => '60 minutes each, starting on the hour. Each time has its own worker: the customer picks a time and that time\'s worker gets the visit.',
+                ])
+                <div class="tc-body">
+                    @if ($workers->isEmpty())
+                        <div class="tc-box is-bad">@include('admin::settings.txn.partials.icon', ['name' => 'alert'])<div>No active worker with a geocoded start address is available. Register and locate a worker first.</div></div>
+                    @endif
+
+                    <div id="booking-slots" class="tc-slots">
+                        @foreach ($oldSlots as $index => $slot)
+                            <div class="booking-slot-row tc-slot">
+                                <span class="tc-slot-num" aria-hidden="true"></span>
+                                <input type="datetime-local" name="slots[]" value="{{ $slot }}" step="3600" required class="tc-input" aria-label="Time">
+                                <select name="slot_workers[]" required class="tc-input" aria-label="Worker">
+                                    <option value="">Worker</option>
+                                    @foreach ($workers as $worker)
+                                        <option value="{{ $worker->id }}" @selected((string) ($oldSlotWorkers[$index] ?? '') === (string) $worker->id)>{{ $worker->name }}</option>
+                                    @endforeach
+                                </select>
+                                <button type="button" onclick="removeBookingSlot(this)" class="tc-btn is-danger">Remove</button>
+                            </div>
+                        @endforeach
+                    </div>
+                    @error('slot_workers') <p class="tc-help" style="color: var(--tc-bad);" role="alert">{{ $message }}</p> @enderror
+
+                    <button type="button" onclick="addBookingSlot()" class="tc-add">@include('admin::settings.txn.partials.icon', ['name' => 'plus', 'size' => 15]) Add another time</button>
+                </div>
+            </section>
+
+            {{-- Ask for --}}
+            <section class="tc-card is-plain">
+                @include('admin::settings.txn.partials.card-head', ['icon' => 'list', 'title' => 'Ask the customer for', 'text' => 'Missing or unusable details are ticked. Answers replace the stored values when the booking syncs. Name and email are always on the booking page.'])
+                <div class="tc-body">
+                    @if ($addressPlan['has_street'])
+                        <p class="tc-note">@include('admin::settings.txn.partials.icon', ['name' => 'map', 'size' => 15]) <span>Visit address on file: {{ $addressPlan['location'] }}.</span></p>
+                    @endif
+
+                    <div class="tc-ask">
+                        @foreach ($askChoices as $choice)
+                            <label>
+                                <input type="checkbox" name="fields[]" value="{{ $choice['code'] }}" @checked(old('_token') === null ? $choice['ticked'] : in_array($choice['code'], $oldFields, true))>
+                                <span class="tc-ask-name">{{ $choice['name'] }}</span>
+                                @if ($choice['why'])
+                                    <span class="tc-badge tc-badge-none">{{ $choice['why'] }}</span>
+                                @endif
+                                <span class="tc-ask-current">{{ $choice['current'] ?? '—' }}</span>
+                            </label>
+                        @endforeach
+                    </div>
+                    <p class="tc-help">Tick any other detail to ask for it again (e.g. a wrong number), or untick what the booking page shouldn't ask.</p>
+                </div>
+            </section>
+
+            @include('admin::settings.txn.partials.savebar', [
+                'noReset' => true,
+                'cancelUrl' => $lead ? route('admin.leads.view', $lead->id) : route('admin.contacts.persons.view', $person->id),
+                'saveLabel' => 'Create link (no email yet)',
+                'saveDisabled' => ! $calcomConfigured || ! $customerEmailEnabled,
+                'idleText' => 'Nothing is created or sent yet',
+            ])
         </form>
     </div>
 
@@ -397,6 +388,7 @@
             list.innerHTML = '';
             slots.forEach((slot) => {
                 const item = document.createElement('li');
+                item.className = 'tc-chip';
                 item.textContent = `${txnSlotLabel(slot.value, true)} — ${slot.workerName}`;
                 list.appendChild(item);
             });
@@ -468,8 +460,7 @@
             if (service) params.set('service', service);
 
             button.disabled = true;
-            box.className = 'mt-3 text-sm dark:text-white';
-            box.textContent = 'Finding times...';
+            box.innerHTML = '<p class="tc-help"><span class="tc-spin" style="display: inline-block; vertical-align: -2px;"></span> Finding times...</p>';
 
             try {
                 const response = await fetch(`${SUGGEST_URL}?${params}`, {
@@ -489,7 +480,7 @@
                     document.getElementById('timezone').value = data.timezone;
                 }
             } catch (error) {
-                box.innerHTML = `<p class="text-red-600">${escapeHtml(error.message)}</p>`;
+                box.innerHTML = `<div class="tc-box is-bad">${escapeHtml(error.message)}</div>`;
             } finally {
                 button.disabled = false;
             }
@@ -497,43 +488,42 @@
 
         function renderSuggestion(data) {
             const loc = data.location || {};
-            let html = `<p class="text-xs text-gray-500">Now: ${escapeHtml(data.now)} (${escapeHtml(data.timezone)})<br>`
+            let html = `<p class="tc-note">Now: ${escapeHtml(data.now)} (${escapeHtml(data.timezone)}) · `
                 + `Customer: ${escapeHtml(loc.address || '-')} &rarr; located by ${escapeHtml(loc.precision || 'nothing')}`
                 + (loc.miles_from_center != null ? `, ${loc.miles_from_center} mi from ${escapeHtml(@json(\Webkul\Admin\Support\Contact\TxnSettings::areaCentreName()))}` : '')
                 + (loc.precision === 'zip' ? ' <b>(ZIP only: approximate)</b>' : '') + '</p>';
 
             if (data.workers?.length) {
-                html += '<p class="mt-2 font-medium">Workers</p><ul class="list-inside list-disc text-xs">';
+                html += '<div><span class="tc-label">Workers</span><div class="tc-chips" style="margin-top: 6px;">';
                 data.workers.forEach(w => {
                     const workerColor = /^#[0-9A-Fa-f]{6}$/.test(w.color || '') ? w.color : '';
-                    html += `<li>${workerColor ? `<span style="color:${workerColor}">●</span> ` : ''}${escapeHtml(w.name)}: `
+                    html += `<span class="tc-chip is-muted" title="${w.jobs} jobs booked, nearest ${w.nearest_job_minutes == null ? '-' : `~${w.nearest_job_minutes} min away`}">`
+                        + (workerColor ? `<span style="color:${workerColor}">●</span>` : '')
+                        + `${escapeHtml(w.name)}: `
                         + (w.best_extra_minutes == null
                             ? 'no free time'
-                            : (w.reachable ? `best time adds ~${w.best_extra_minutes} min` : `only times they can't reach on time (best adds ~${w.best_extra_minutes} min)`))
-                        + `; ${w.jobs} jobs booked, nearest ` + (w.nearest_job_minutes == null ? '-' : `~${w.nearest_job_minutes} min away`)
-                        + '</li>';
+                            : (w.reachable ? `best adds ~${w.best_extra_minutes} min` : `can't reach on time (~${w.best_extra_minutes} min)`))
+                        + '</span>';
                 });
-                html += '</ul>';
+                html += '</div></div>';
             }
 
             if (data.status !== 'OK') {
-                return html + `<p class="mt-2 font-medium text-red-600">${escapeHtml(SUGGEST_STATUS[data.status] || data.status)}</p>`;
+                return html + `<div class="tc-box is-bad">${escapeHtml(SUGGEST_STATUS[data.status] || data.status)}</div>`;
             }
 
-            html += '<p class="mt-2 font-medium">Suggested (least extra driving first, from any worker) &mdash; filled in below</p>';
+            html += '<span class="tc-label">Suggested: least extra driving first, from any worker. Filled in below.</span>';
             data.options.forEach((option, index) => {
                 const workerColor = /^#[0-9A-Fa-f]{6}$/.test(option.worker_color || '') ? option.worker_color : '';
-                html += `<div class="mt-2 rounded border border-gray-200 p-2 dark:border-gray-800">`
-                    + `<b>${index + 1}. ${escapeHtml(option.label)}</b> with `
-                    + (workerColor ? `<span style="color:${workerColor}">●</span> ` : '')
-                    + `${escapeHtml(option.worker)} `
-                    + `<span class="text-xs text-gray-500">(+${option.extra_drive_minutes} min extra driving; `
-                    + `~${option.drive_in_minutes} in, ~${option.drive_out_minutes} out)</span>`
-                    + (option.late ? ' <b class="text-red-600">worker would arrive late</b>' : '')
-                    + '<ul class="ml-4 mt-1 text-xs">';
+                html += `<div class="tc-option" style="${workerColor ? `--tc-opt: ${workerColor};` : ''}">`
+                    + '<div class="tc-option-head">'
+                    + `<b>${index + 1}. ${escapeHtml(option.label)}</b>`
+                    + `<span class="tc-chip">${escapeHtml(option.worker)}</span>`
+                    + `<span class="tc-sub">+${option.extra_drive_minutes} min extra driving · ~${option.drive_in_minutes} in, ~${option.drive_out_minutes} out</span>`
+                    + (option.late ? ' <span class="tc-late">worker would arrive late</span>' : '')
+                    + '</div><ul>';
                 for (const row of option.day_schedule) {
-                    html += `<li class="${row.new ? 'font-semibold text-green-700' : 'text-gray-600 dark:text-gray-300'}">`
-                        + `${escapeHtml(row.time)} &nbsp; ${escapeHtml(row.label)}</li>`;
+                    html += `<li class="${row.new ? 'is-new' : ''}">${escapeHtml(row.time)} &nbsp; ${escapeHtml(row.label)}</li>`;
                 }
                 html += '</ul></div>';
             });
@@ -577,18 +567,4 @@
             }
         }
     </script>
-
-    @push('styles')
-        <style>
-            .txn-ask-list { border: 1px solid #e5e7eb; border-radius: 6px; }
-            .txn-ask-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; font-size: 14px; cursor: pointer; }
-            .txn-ask-row + .txn-ask-row { border-top: 1px solid #e5e7eb; }
-            .txn-ask-name { min-width: 120px; font-weight: 500; }
-            .txn-ask-badge { font-size: 11px; padding: 1px 8px; border-radius: 9999px; background: #fef3c7; color: #92400e; white-space: nowrap; }
-            .txn-ask-current { margin-left: auto; color: #6b7280; font-size: 13px; text-align: right; overflow-wrap: anywhere; }
-            .dark .txn-ask-list, .dark .txn-ask-row + .txn-ask-row { border-color: #1f2937; }
-            .dark .txn-ask-row { color: #fff; }
-            .dark .txn-ask-current { color: #9ca3af; }
-        </style>
-    @endpush
 </x-admin::layouts>

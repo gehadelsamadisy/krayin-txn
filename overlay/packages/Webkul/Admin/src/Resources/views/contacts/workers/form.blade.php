@@ -1,182 +1,233 @@
+{{-- Contacts > Workers > Register / Edit worker (WorkerController). Styles: settings/txn/partials/tc-styles (.tc, scoped). --}}
 <x-admin::layouts>
     <x-slot:title>
         {{ $worker ? 'Edit worker' : 'Register worker' }}
     </x-slot>
 
+    @php
+        $name = old('name', $worker?->name ?? '');
+        $initials = collect(preg_split('/\s+/', trim($name)))->filter()->take(2)->map(fn ($part) => mb_strtoupper(mb_substr($part, 0, 1)))->implode('') ?: '?';
+        $color = old('calendar_color', $worker?->calendar_color ?? '');
+        $active = (bool) old('is_active', $worker?->is_active ?? true);
+
+        $hours = collect($weekdays)->mapWithKeys(function ($dayName, $day) use ($worker) {
+            $value = old("work_hours.{$day}", $worker?->work_hours[$day] ?? []);
+
+            return [$day => is_array($value) ? [$value['start'] ?? $value[0] ?? '', $value['end'] ?? $value[1] ?? ''] : ['', '']];
+        })->all();
+
+        $timeOffValues = old('time_off', $worker?->timeOffs?->map(fn ($entry) => [
+            'start_date' => $entry->start_date?->format('Y-m-d'),
+            'end_date' => $entry->end_date?->format('Y-m-d'),
+            'start_time' => $entry->start_time,
+            'end_time' => $entry->end_time,
+            'type' => $entry->type,
+            'note' => $entry->note,
+        ])->all() ?? []);
+        $nextTimeOffIndex = $timeOffValues ? max(array_keys($timeOffValues)) + 1 : 0;
+        $timeOffTypes = ['annual_leave' => 'Annual leave', 'sick' => 'Sick', 'personal' => 'Personal', 'other' => 'Other'];
+        $error = fn (string $key) => $errors->first($key);
+    @endphp
+
+    @include('admin::settings.txn.partials.tc-styles')
+
     <div class="mx-auto flex w-full max-w-5xl flex-col gap-4">
-        <div class="rounded-lg border border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900">
-            <h1 class="text-xl font-bold dark:text-white">
-                {{ $worker ? 'Edit worker' : 'Register worker' }}
-            </h1>
+        <div class="tc tc-top">
+            <span class="tc-avatar is-lg" id="worker-avatar" style="{{ $color ? "background: {$color};" : '' }}">{{ $initials }}</span>
+            <div class="tc-top-text">
+                <span class="tc-crumb">Workers</span>
+                <h1>{{ $worker ? $worker->name : 'Register worker' }}</h1>
+                <p>{{ $worker ? 'Details, working hours and time off. Changes apply to new suggestions and bookings.' : 'Add a worker who can receive home visits. Times are suggested from their address, hours and services.' }}</p>
+            </div>
+            @if ($worker)
+                <span class="tc-status {{ $worker->is_active ? 'is-on' : 'is-off' }}">{{ $worker->is_active ? 'Active' : 'Inactive' }}</span>
+            @endif
+            <a href="{{ route('admin.contacts.workers.index') }}" class="secondary-button">Back to workers</a>
         </div>
 
         <form
             method="POST"
             action="{{ $worker ? route('admin.contacts.workers.update', $worker->id) : route('admin.contacts.workers.store') }}"
-            class="flex flex-col gap-6 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900"
+            class="tc tc-form"
         >
             @csrf
             @if ($worker)
                 @method('PUT')
             @endif
 
-            <section class="grid gap-4 md:grid-cols-2">
-                <h2 class="text-lg font-semibold dark:text-white md:col-span-2">Worker details</h2>
-
-                <div>
-                    <label for="name" class="mb-1 block text-sm font-medium dark:text-gray-200">Name</label>
-                    <input id="name" name="name" type="text" value="{{ old('name', $worker?->name ?? '') }}" required maxlength="255" class="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                    @error('name') <p class="mt-1 text-sm text-red-600" role="alert">{{ $message }}</p> @enderror
+            @if ($errors->any())
+                <div class="tc-alert" role="alert">
+                    @include('admin::settings.txn.partials.icon', ['name' => 'alert'])
+                    <div><strong>Not saved</strong>Check the fields marked below.</div>
                 </div>
+            @endif
 
-                <div>
-                    <label for="phone" class="mb-1 block text-sm font-medium dark:text-gray-200">Phone</label>
-                    <input id="phone" name="phone" type="text" value="{{ old('phone', $worker?->phone ?? '') }}" maxlength="50" class="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                    @error('phone') <p class="mt-1 text-sm text-red-600" role="alert">{{ $message }}</p> @enderror
-                </div>
-
-                <div>
-                    <label for="email" class="mb-1 block text-sm font-medium dark:text-gray-200">Email</label>
-                    <input id="email" name="email" type="email" value="{{ old('email', $worker?->email ?? '') }}" maxlength="255" class="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                    @error('email') <p class="mt-1 text-sm text-red-600" role="alert">{{ $message }}</p> @enderror
-                </div>
-
-                <div>
-                    <label for="priority" class="mb-1 block text-sm font-medium dark:text-gray-200">Priority</label>
-                    <input id="priority" name="priority" type="number" min="1" max="65535" value="{{ old('priority', $worker?->priority ?? 1) }}" required class="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                    <p class="mt-1 text-xs text-gray-500">1 is preferred; priority only breaks scheduling ties.</p>
-                    @error('priority') <p class="mt-1 text-sm text-red-600" role="alert">{{ $message }}</p> @enderror
-                </div>
-
-                <div class="md:col-span-2">
-                    <label for="notes" class="mb-1 block text-sm font-medium dark:text-gray-200">Notes</label>
-                    <textarea id="notes" name="notes" rows="3" maxlength="2000" class="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white">{{ old('notes', $worker?->notes ?? '') }}</textarea>
-                    @error('notes') <p class="mt-1 text-sm text-red-600" role="alert">{{ $message }}</p> @enderror
-                </div>
-
-                <div class="md:col-span-2">
-                    <label for="start_address" class="mb-1 block text-sm font-medium dark:text-gray-200">Start and end address</label>
-                    <input id="start_address" name="start_address" type="text" value="{{ old('start_address', $worker?->start_address ?? '') }}" required maxlength="255" placeholder="Worker's home or office" class="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                    <p class="mt-1 text-xs text-gray-500">
-                        Krayin looks up the map location when you save.
-                        @if ($worker?->home_latitude !== null && $worker?->home_longitude !== null)
-                            Saved location: {{ number_format($worker->home_latitude, 5) }}, {{ number_format($worker->home_longitude, 5) }}.
-                        @endif
-                    </p>
-                    @error('start_address') <p class="mt-1 text-sm text-red-600" role="alert">{{ $message }}</p> @enderror
-                </div>
-
-                <div>
-                    <label for="services_text" class="mb-1 block text-sm font-medium dark:text-gray-200">Services they can do</label>
-                    <textarea id="services_text" name="services_text" rows="3" maxlength="5000" placeholder="One service per line, e.g. Gutter" class="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white">{{ old('services_text', implode("\n", $worker?->services ?? [])) }}</textarea>
-                    <p class="mt-1 text-xs text-gray-500">Leave blank if all workers do every service.</p>
-                    @error('services_text') <p class="mt-1 text-sm text-red-600" role="alert">{{ $message }}</p> @enderror
-                </div>
-
-                <div>
-                    <label for="max_visits_per_day" class="mb-1 block text-sm font-medium dark:text-gray-200">Max visits per day</label>
-                    <input id="max_visits_per_day" name="max_visits_per_day" type="number" min="1" max="65535" value="{{ old('max_visits_per_day', $worker?->max_visits_per_day ?? '') }}" class="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                    <p class="mt-1 text-xs text-gray-500">Leave blank for no daily cap.</p>
-                    @error('max_visits_per_day') <p class="mt-1 text-sm text-red-600" role="alert">{{ $message }}</p> @enderror
-                </div>
-
-                <div>
-                    <label for="calendar_color" class="mb-1 block text-sm font-medium dark:text-gray-200">Calendar color</label>
-                    <input id="calendar_color" name="calendar_color" type="text" pattern="#[0-9A-Fa-f]{6}" maxlength="7" placeholder="#2563EB" value="{{ old('calendar_color', $worker?->calendar_color ?? '') }}" class="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                    <p class="mt-1 text-xs text-gray-500">Optional six-digit hex color.</p>
-                    @error('calendar_color') <p class="mt-1 text-sm text-red-600" role="alert">{{ $message }}</p> @enderror
-                </div>
-
-                <div class="flex items-center gap-2">
-                    <input type="hidden" name="is_active" value="0">
-                    <input id="is_active" type="checkbox" name="is_active" value="1" @checked(old('is_active', $worker?->is_active ?? true))>
-                    <label for="is_active" class="text-sm dark:text-gray-200">Active — can receive new appointments</label>
-                </div>
-            </section>
-
-            <section class="flex flex-col gap-3">
-                <div>
-                    <h2 class="text-lg font-semibold dark:text-white">Weekly work hours</h2>
-                    <p class="text-sm text-gray-500">Leave every day blank to use company default hours. A blank day in a custom schedule is a day off.</p>
-                </div>
-
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left text-sm">
-                        <thead class="border-b text-gray-600 dark:border-gray-700 dark:text-gray-300">
-                            <tr><th class="py-2 pr-3">Day</th><th class="py-2 pr-3">Start</th><th class="py-2">End</th></tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-200 dark:divide-gray-800">
-                            @foreach ($weekdays as $day => $dayName)
-                                @php
-                                    $hours = old("work_hours.{$day}", $worker?->work_hours[$day] ?? []);
-                                    $start = is_array($hours) ? ($hours['start'] ?? $hours[0] ?? '') : '';
-                                    $end = is_array($hours) ? ($hours['end'] ?? $hours[1] ?? '') : '';
-                                @endphp
-                                <tr>
-                                    <td class="py-2 pr-3 dark:text-gray-200">{{ $dayName }}</td>
-                                    <td class="py-2 pr-3"><input type="time" name="work_hours[{{ $day }}][start]" value="{{ $start }}" class="rounded border border-gray-300 px-2 py-1 dark:border-gray-700 dark:bg-gray-800 dark:text-white"></td>
-                                    <td class="py-2"><input type="time" name="work_hours[{{ $day }}][end]" value="{{ $end }}" class="rounded border border-gray-300 px-2 py-1 dark:border-gray-700 dark:bg-gray-800 dark:text-white"></td>
-                                </tr>
-                                @error("work_hours.{$day}.start") <tr><td colspan="3" class="pb-2 text-sm text-red-600" role="alert">{{ $message }}</td></tr> @enderror
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <section class="flex flex-col gap-3">
-                <div class="flex items-center justify-between gap-3">
-                    <div>
-                        <h2 class="text-lg font-semibold dark:text-white">Time off</h2>
-                        <p class="text-sm text-gray-500">Add whole days or, for one date, a partial-day time range.</p>
+            {{-- Status --}}
+            <section class="tc-card {{ $active ? 'tc-guard-on' : 'tc-guard-off' }}" id="status-card">
+                <div class="tc-head">
+                    <span class="tc-mark">@include('admin::settings.txn.partials.icon', ['name' => 'check'])</span>
+                    <div class="tc-title">
+                        <h2>Available for new appointments</h2>
+                        <p>Off: the worker gets no new suggested times or bookings. Their existing appointments stay.</p>
                     </div>
-                    <button id="add-time-off" type="button" class="secondary-button">Add time off</button>
-                </div>
-
-                @error('time_off') <p class="text-sm text-red-600" role="alert">{{ $message }}</p> @enderror
-                <div id="time-off-list" class="flex flex-col gap-3">
-                    @php
-                        $timeOffValues = old('time_off', $worker?->timeOffs?->map(fn ($entry) => [
-                            'start_date' => $entry->start_date?->format('Y-m-d'),
-                            'end_date' => $entry->end_date?->format('Y-m-d'),
-                            'start_time' => $entry->start_time,
-                            'end_time' => $entry->end_time,
-                            'type' => $entry->type,
-                            'note' => $entry->note,
-                        ])->all() ?? []);
-                        $nextTimeOffIndex = $timeOffValues ? max(array_keys($timeOffValues)) + 1 : 0;
-                    @endphp
-
-                    @foreach ($timeOffValues as $index => $entry)
-                        <div class="time-off-entry grid gap-3 rounded border border-gray-200 p-3 dark:border-gray-700 md:grid-cols-3">
-                            <div><label class="mb-1 block text-xs dark:text-gray-300">From</label><input type="date" name="time_off[{{ $index }}][start_date]" value="{{ $entry['start_date'] ?? '' }}" class="w-full rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-800 dark:text-white"></div>
-                            <div><label class="mb-1 block text-xs dark:text-gray-300">To</label><input type="date" name="time_off[{{ $index }}][end_date]" value="{{ $entry['end_date'] ?? '' }}" class="w-full rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-800 dark:text-white"></div>
-                            <div><label class="mb-1 block text-xs dark:text-gray-300">Type</label><select name="time_off[{{ $index }}][type]" class="w-full rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-800 dark:text-white"><option value="">Choose type</option>@foreach (['annual_leave' => 'Annual leave', 'sick' => 'Sick', 'personal' => 'Personal', 'other' => 'Other'] as $value => $label)<option value="{{ $value }}" @selected(($entry['type'] ?? '') === $value)>{{ $label }}</option>@endforeach</select></div>
-                            <div><label class="mb-1 block text-xs dark:text-gray-300">Part of day — start (optional)</label><input type="time" name="time_off[{{ $index }}][start_time]" value="{{ $entry['start_time'] ?? '' }}" class="w-full rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-800 dark:text-white"></div>
-                            <div><label class="mb-1 block text-xs dark:text-gray-300">Part of day — end (optional)</label><input type="time" name="time_off[{{ $index }}][end_time]" value="{{ $entry['end_time'] ?? '' }}" class="w-full rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-800 dark:text-white"></div>
-                            <div><label class="mb-1 block text-xs dark:text-gray-300">Note (optional)</label><input type="text" name="time_off[{{ $index }}][note]" maxlength="1000" value="{{ $entry['note'] ?? '' }}" class="w-full rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-800 dark:text-white"></div>
-                            <button type="button" class="remove-time-off justify-self-start text-sm text-red-600 hover:underline md:col-span-3">Remove entry</button>
-                        </div>
-                    @endforeach
+                    <input type="hidden" name="is_active" value="0">
+                    <label class="tc-toggle">
+                        <input id="is_active" type="checkbox" name="is_active" value="1" @checked($active)>
+                        <span class="tc-toggle-track"></span>
+                        <span id="is-active-text">{{ $active ? 'Active' : 'Inactive' }}</span>
+                    </label>
                 </div>
             </section>
 
-            <div class="flex items-center justify-end gap-2">
-                <a href="{{ route('admin.contacts.workers.index') }}" class="secondary-button">Cancel</a>
-                <button type="submit" class="primary-button">{{ $worker ? 'Save changes' : 'Register worker' }}</button>
-            </div>
+            {{-- Details --}}
+            <section class="tc-card is-plain">
+                @include('admin::settings.txn.partials.card-head', ['icon' => 'user', 'title' => 'Worker details', 'text' => 'How staff and customers reach this worker.'])
+                <div class="tc-body">
+                    <div class="tc-grid">
+                        <div class="tc-field">
+                            <label for="name" class="tc-label">Name</label>
+                            <input id="name" name="name" type="text" value="{{ $name }}" required maxlength="255" class="tc-input" placeholder="e.g. Sam Rivera">
+                            @if ($error('name')) <p class="tc-help" style="color: var(--tc-bad);" role="alert">{{ $error('name') }}</p> @endif
+                        </div>
+
+                        <div class="tc-field">
+                            <label for="phone" class="tc-label">Phone</label>
+                            <input id="phone" name="phone" type="text" value="{{ old('phone', $worker?->phone ?? '') }}" maxlength="50" class="tc-input" placeholder="e.g. (713) 555-0101">
+                            @if ($error('phone')) <p class="tc-help" style="color: var(--tc-bad);" role="alert">{{ $error('phone') }}</p> @endif
+                        </div>
+
+                        <div class="tc-field">
+                            <label for="email" class="tc-label">Email</label>
+                            <input id="email" name="email" type="email" value="{{ old('email', $worker?->email ?? '') }}" maxlength="255" class="tc-input" placeholder="name@company.com">
+                            @if ($error('email')) <p class="tc-help" style="color: var(--tc-bad);" role="alert">{{ $error('email') }}</p> @endif
+                        </div>
+
+                        <div class="tc-field">
+                            <label for="priority" class="tc-label">Priority</label>
+                            <input id="priority" name="priority" type="number" min="1" max="65535" value="{{ old('priority', $worker?->priority ?? 1) }}" required class="tc-input is-short">
+                            <p class="tc-help">1 is preferred; priority only breaks scheduling ties.</p>
+                            @if ($error('priority')) <p class="tc-help" style="color: var(--tc-bad);" role="alert">{{ $error('priority') }}</p> @endif
+                        </div>
+
+                        <div class="tc-field tc-wide">
+                            <label for="notes" class="tc-label">Notes <span class="tc-sublabel">(optional)</span></label>
+                            <textarea id="notes" name="notes" rows="3" maxlength="2000" class="tc-input">{{ old('notes', $worker?->notes ?? '') }}</textarea>
+                            @if ($error('notes')) <p class="tc-help" style="color: var(--tc-bad);" role="alert">{{ $error('notes') }}</p> @endif
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {{-- Location --}}
+            <section class="tc-card is-plain">
+                @include('admin::settings.txn.partials.card-head', ['icon' => 'home', 'title' => 'Where the day starts and ends', 'text' => 'Drive times to customers are worked out from this address.'])
+                <div class="tc-body">
+                    <div class="tc-field">
+                        <label for="start_address" class="tc-label">Start and end address</label>
+                        <input id="start_address" name="start_address" type="text" value="{{ old('start_address', $worker?->start_address ?? '') }}" required maxlength="255" placeholder="Worker's home or office" class="tc-input">
+                        <p class="tc-help">
+                            Krayin looks up the map location when you save.
+                            @if ($worker?->home_latitude !== null && $worker?->home_longitude !== null)
+                                <span class="tc-chip is-muted">@include('admin::settings.txn.partials.icon', ['name' => 'map', 'size' => 12]) {{ number_format($worker->home_latitude, 5) }}, {{ number_format($worker->home_longitude, 5) }}</span>
+                            @endif
+                        </p>
+                        @if ($error('start_address')) <p class="tc-help" style="color: var(--tc-bad);" role="alert">{{ $error('start_address') }}</p> @endif
+                    </div>
+                </div>
+            </section>
+
+            {{-- Work --}}
+            <section class="tc-card is-plain">
+                @include('admin::settings.txn.partials.card-head', ['icon' => 'wrench', 'title' => 'Work', 'text' => 'Which jobs this worker is offered for, and how many a day.'])
+                <div class="tc-body">
+                    <div class="tc-grid">
+                        <div class="tc-field">
+                            <label for="services_text" class="tc-label">Services they can do</label>
+                            <textarea id="services_text" name="services_text" rows="3" maxlength="5000" placeholder="One service per line, e.g. Gutter" class="tc-input">{{ old('services_text', implode("\n", $worker?->services ?? [])) }}</textarea>
+                            <div class="tc-chips" id="service-chips"></div>
+                            <p class="tc-help">Leave blank if this worker does every service.</p>
+                            @if ($error('services_text')) <p class="tc-help" style="color: var(--tc-bad);" role="alert">{{ $error('services_text') }}</p> @endif
+                        </div>
+
+                        <div class="tc-field" style="gap: 18px;">
+                            <div class="tc-field">
+                                <label for="max_visits_per_day" class="tc-label">Max visits per day</label>
+                                <div class="tc-unit">
+                                    <input id="max_visits_per_day" name="max_visits_per_day" type="number" min="1" max="65535" value="{{ old('max_visits_per_day', $worker?->max_visits_per_day ?? '') }}" class="tc-input" placeholder="No cap">
+                                    <span>visits</span>
+                                </div>
+                                <p class="tc-help">Leave blank for no daily cap.</p>
+                                @if ($error('max_visits_per_day')) <p class="tc-help" style="color: var(--tc-bad);" role="alert">{{ $error('max_visits_per_day') }}</p> @endif
+                            </div>
+
+                            <div class="tc-field">
+                                <label for="calendar_color" class="tc-label">Calendar colour <span class="tc-sublabel">(optional)</span></label>
+                                <div class="tc-colorpick">
+                                    <input type="color" id="calendar_color_pick" value="{{ preg_match('/^#[0-9A-Fa-f]{6}$/', $color) ? $color : '#0E90D9' }}" aria-label="Pick a colour">
+                                    <input id="calendar_color" name="calendar_color" type="text" pattern="#[0-9A-Fa-f]{6}" maxlength="7" placeholder="#2563EB" value="{{ $color }}" class="tc-input">
+                                </div>
+                                <p class="tc-help">How this worker's visits look on the calendars and maps.</p>
+                                @if ($error('calendar_color')) <p class="tc-help" style="color: var(--tc-bad);" role="alert">{{ $error('calendar_color') }}</p> @endif
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {{-- Weekly hours --}}
+            <section class="tc-card is-plain">
+                @include('admin::settings.txn.partials.card-head', ['icon' => 'clock', 'title' => 'Weekly work hours', 'text' => 'Leave every day blank to use the company hours. In a custom week, a blank day is a day off.'])
+                <div class="tc-body">
+                    @include('admin::settings.txn.partials.week-hours', ['field' => 'work_hours', 'hours' => $hours, 'allBlankLabel' => 'Company hours'])
+                </div>
+            </section>
+
+            {{-- Time off --}}
+            <section class="tc-card is-plain">
+                @include('admin::settings.txn.partials.card-head', [
+                    'icon' => 'beach',
+                    'title' => 'Time off',
+                    'text' => 'Whole days, or part of one day. No visits are suggested in these times.',
+                    'aside' => '<button id="add-time-off" type="button" class="tc-add">+ Add time off</button>',
+                ])
+                <div class="tc-body">
+                    @if ($error('time_off')) <p class="tc-help" style="color: var(--tc-bad);" role="alert">{{ $error('time_off') }}</p> @endif
+                    <p class="tc-empty" id="time-off-empty" @if ($timeOffValues) style="display: none;" @endif>No time off planned.</p>
+
+                    <div id="time-off-list" class="tc-rows">
+                        @foreach ($timeOffValues as $index => $entry)
+                            <div class="time-off-entry tc-entry">
+                                <div class="tc-field"><label class="tc-label">From</label><input type="date" name="time_off[{{ $index }}][start_date]" value="{{ $entry['start_date'] ?? '' }}" class="tc-input"></div>
+                                <div class="tc-field"><label class="tc-label">To</label><input type="date" name="time_off[{{ $index }}][end_date]" value="{{ $entry['end_date'] ?? '' }}" class="tc-input"></div>
+                                <div class="tc-field"><label class="tc-label">Type</label><select name="time_off[{{ $index }}][type]" class="tc-input"><option value="">Choose type</option>@foreach ($timeOffTypes as $value => $label)<option value="{{ $value }}" @selected(($entry['type'] ?? '') === $value)>{{ $label }}</option>@endforeach</select></div>
+                                <div class="tc-field"><label class="tc-label">Part of day: start <span class="tc-sublabel">(optional)</span></label><input type="time" name="time_off[{{ $index }}][start_time]" value="{{ $entry['start_time'] ?? '' }}" class="tc-input"></div>
+                                <div class="tc-field"><label class="tc-label">Part of day: end <span class="tc-sublabel">(optional)</span></label><input type="time" name="time_off[{{ $index }}][end_time]" value="{{ $entry['end_time'] ?? '' }}" class="tc-input"></div>
+                                <div class="tc-field"><label class="tc-label">Note <span class="tc-sublabel">(optional)</span></label><input type="text" name="time_off[{{ $index }}][note]" maxlength="1000" value="{{ $entry['note'] ?? '' }}" class="tc-input"></div>
+                                <div class="tc-entry-foot"><button type="button" class="remove-time-off tc-btn is-danger">Remove</button></div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            </section>
+
+            @include('admin::settings.txn.partials.savebar', [
+                'noReset' => true,
+                'cancelUrl' => route('admin.contacts.workers.index'),
+                'saveLabel' => $worker ? 'Save changes' : 'Register worker',
+                'idleText' => $worker ? 'No changes yet' : 'Fill in the details, then register',
+            ])
         </form>
     </div>
 
     <template id="time-off-template">
-        <div class="time-off-entry grid gap-3 rounded border border-gray-200 p-3 dark:border-gray-700 md:grid-cols-3">
-            <div><label class="mb-1 block text-xs dark:text-gray-300">From</label><input type="date" data-field="start_date" class="w-full rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-800 dark:text-white"></div>
-            <div><label class="mb-1 block text-xs dark:text-gray-300">To</label><input type="date" data-field="end_date" class="w-full rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-800 dark:text-white"></div>
-            <div><label class="mb-1 block text-xs dark:text-gray-300">Type</label><select data-field="type" class="w-full rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-800 dark:text-white"><option value="">Choose type</option><option value="annual_leave">Annual leave</option><option value="sick">Sick</option><option value="personal">Personal</option><option value="other">Other</option></select></div>
-            <div><label class="mb-1 block text-xs dark:text-gray-300">Part of day — start (optional)</label><input type="time" data-field="start_time" class="w-full rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-800 dark:text-white"></div>
-            <div><label class="mb-1 block text-xs dark:text-gray-300">Part of day — end (optional)</label><input type="time" data-field="end_time" class="w-full rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-800 dark:text-white"></div>
-            <div><label class="mb-1 block text-xs dark:text-gray-300">Note (optional)</label><input type="text" data-field="note" maxlength="1000" class="w-full rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-800 dark:text-white"></div>
-            <button type="button" class="remove-time-off justify-self-start text-sm text-red-600 hover:underline md:col-span-3">Remove entry</button>
+        <div class="time-off-entry tc-entry">
+            <div class="tc-field"><label class="tc-label">From</label><input type="date" data-field="start_date" class="tc-input"></div>
+            <div class="tc-field"><label class="tc-label">To</label><input type="date" data-field="end_date" class="tc-input"></div>
+            <div class="tc-field"><label class="tc-label">Type</label><select data-field="type" class="tc-input"><option value="">Choose type</option>@foreach ($timeOffTypes as $value => $label)<option value="{{ $value }}">{{ $label }}</option>@endforeach</select></div>
+            <div class="tc-field"><label class="tc-label">Part of day: start <span class="tc-sublabel">(optional)</span></label><input type="time" data-field="start_time" class="tc-input"></div>
+            <div class="tc-field"><label class="tc-label">Part of day: end <span class="tc-sublabel">(optional)</span></label><input type="time" data-field="end_time" class="tc-input"></div>
+            <div class="tc-field"><label class="tc-label">Note <span class="tc-sublabel">(optional)</span></label><input type="text" data-field="note" maxlength="1000" class="tc-input"></div>
+            <div class="tc-entry-foot"><button type="button" class="remove-time-off tc-btn is-danger">Remove</button></div>
         </div>
     </template>
 
@@ -184,6 +235,9 @@
         <script>
             (() => {
                 let nextIndex = {{ $nextTimeOffIndex }};
+                const list = document.getElementById('time-off-list');
+                const empty = document.getElementById('time-off-empty');
+                const showEmpty = () => { empty.style.display = list.children.length ? 'none' : ''; };
 
                 document.addEventListener('click', (event) => {
                     if (!(event.target instanceof Element)) {
@@ -191,19 +245,15 @@
                     }
 
                     if (event.target.closest('#add-time-off')) {
-                        const list = document.getElementById('time-off-list');
                         const template = document.getElementById('time-off-template');
-
-                        if (! list || ! template) {
-                            return;
-                        }
-
                         const entry = template.content.firstElementChild.cloneNode(true);
                         entry.querySelectorAll('[data-field]').forEach((input) => {
                             input.name = `time_off[${nextIndex}][${input.dataset.field}]`;
                         });
                         nextIndex += 1;
                         list.appendChild(entry);
+                        showEmpty();
+                        entry.querySelector('input').focus();
 
                         return;
                     }
@@ -212,8 +262,47 @@
 
                     if (removeButton) {
                         removeButton.closest('.time-off-entry')?.remove();
+                        showEmpty();
                     }
                 });
+
+                // Active switch: card colour and text follow it.
+                const active = document.getElementById('is_active');
+                active.addEventListener('change', () => {
+                    document.getElementById('status-card').className = `tc-card ${active.checked ? 'tc-guard-on' : 'tc-guard-off'}`;
+                    document.getElementById('is-active-text').textContent = active.checked ? 'Active' : 'Inactive';
+                });
+
+                // Avatar initials and colour follow the name and the colour.
+                const avatar = document.getElementById('worker-avatar');
+                const nameField = document.getElementById('name');
+                const pick = document.getElementById('calendar_color_pick');
+                const colorText = document.getElementById('calendar_color');
+                const refreshAvatar = () => {
+                    avatar.textContent = nameField.value.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join('') || '?';
+                    avatar.style.background = /^#[0-9A-Fa-f]{6}$/.test(colorText.value) ? colorText.value : '';
+                };
+                nameField.addEventListener('input', refreshAvatar);
+                pick.addEventListener('input', () => { colorText.value = pick.value.toUpperCase(); refreshAvatar(); });
+                colorText.addEventListener('input', () => {
+                    if (/^#[0-9A-Fa-f]{6}$/.test(colorText.value)) {
+                        pick.value = colorText.value;
+                    }
+                    refreshAvatar();
+                });
+
+                // Services as chips.
+                const services = document.getElementById('services_text');
+                const chips = document.getElementById('service-chips');
+                const refreshServices = () => {
+                    const items = services.value.split(/\n/).map((line) => line.trim()).filter(Boolean);
+                    chips.replaceChildren(...(items.length ? items : ['All services']).map((text) => Object.assign(document.createElement('span'), {
+                        className: items.length ? 'tc-chip' : 'tc-chip is-muted',
+                        textContent: text,
+                    })));
+                };
+                services.addEventListener('input', refreshServices);
+                refreshServices();
             })();
         </script>
     @endPushOnce
