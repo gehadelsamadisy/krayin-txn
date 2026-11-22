@@ -5,7 +5,7 @@
     $yelpId = isset($lead) ? \Webkul\Admin\Support\Contact\YelpMessageStore::sourceLeadId($lead) : null;
     $thread = collect();
 
-    if ($yelpId && bouncer()->hasPermission('leads.yelp_messages') && \Webkul\Admin\Support\Contact\ServiceHealth::hasKey('msg_db')) {
+    if ($yelpId && bouncer()->hasPermission('yelp_messages') && \Webkul\Admin\Support\Contact\ServiceHealth::hasKey('msg_db')) {
         try {
             $store = app(\Webkul\Admin\Support\Contact\YelpMessageStore::class);
             $thread = $store->thread($yelpId);

@@ -207,6 +207,7 @@ try {
     $leadHtml = $page('admin.leads.view', ['id' => $lead->id]);
     $check('Lead page: "Yelp messages" card with the chat', str_contains($leadHtml, 'Yelp messages') && str_contains($leadHtml, 'Yes, Tuesday 11 AM works.'));
     $check('Leads list: "Yelp messages" button with the unread badge', (bool) preg_match('~Yelp messages\s*<span[^>]*>\s*1\s*</span>~', $page('admin.leads.index')));
+    $check('Sidebar: "Yelp messages" item linking to the inbox', str_contains($page('admin.dashboard.index'), route('admin.leads.yelp_messages', [], false)));
     $auto = $page('admin.settings.txn.automation');
     $check('Automation screen: Yelp messages card with the webhook address', str_contains($auto, 'Accept Yelp messages from Zapier') && str_contains($auto, '/txn/yelp-message'));
     $check('Connections screen: Yelp messages database card', str_contains($page('admin.settings.txn.connections'), 'Yelp messages database'));

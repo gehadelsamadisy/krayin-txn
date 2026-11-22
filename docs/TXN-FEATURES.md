@@ -194,7 +194,7 @@ attachment_text`.
   `[TXN-YELP-<lead_id>]`. Messages for leads not in Krayin are kept and
   listed as "No lead in Krayin".
 - **Where it shows:**
-  - **Leads > Yelp messages** (permission `leads.yelp_messages`): conversation list (All / Unread / No lead in Krayin, search) and the chosen chat. Customer on the left, us on the right, photos inline.
+  - **Yelp messages** in the sidebar and **Leads > Yelp messages** (permission `yelp_messages`): conversation list (All / Unread / No lead in Krayin, search) and the chosen chat. Customer on the left, us on the right, photos inline.
   - A **Yelp messages** card on the lead.
   - A **Yelp messages** button with an unread badge on the leads list.
   - Opening a chat marks it read.

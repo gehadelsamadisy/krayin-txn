@@ -7,7 +7,7 @@
             <a href="{{ route('admin.leads.waiting') }}" class="secondary-button" title="Customers sent a booking link who haven't booked yet: link, times, follow-ups, next step">Waiting</a>
         @endif
 
-        @if (bouncer()->hasPermission('leads.yelp_messages'))
+        @if (bouncer()->hasPermission('yelp_messages'))
             @php
                 $yelpUnread = \Webkul\Admin\Support\Contact\ServiceHealth::hasKey('msg_db')
                     ? app(\Webkul\Admin\Support\Contact\YelpMessageStore::class)->unreadCount() : 0;

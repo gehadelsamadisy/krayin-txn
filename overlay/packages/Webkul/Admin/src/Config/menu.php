@@ -39,6 +39,13 @@ return [
         'route' => 'admin.contacts.workers.go_routes',
         'sort' => 2.2,
         'icon-class' => 'icon-settings-flow',
+    ], [
+        // TXN: Yelp chats saved from Zapier (YelpMessagesController; permission yelp_messages).
+        'key' => 'yelp_messages',
+        'name' => 'Yelp messages',
+        'route' => 'admin.leads.yelp_messages',
+        'sort' => 2.3,
+        'icon-class' => 'icon-note',
     ],
 
     /**
