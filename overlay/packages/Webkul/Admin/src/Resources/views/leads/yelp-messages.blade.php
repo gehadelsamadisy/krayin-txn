@@ -1,4 +1,4 @@
-{{-- Leads > Yelp messages (YelpMessagesController): Yelp conversations saved from Zapier, list + chat. Read-only.
+{{-- Leads > Yelp messages (YelpMessagesController): Yelp conversations saved from Zapier, list + chat + reply box.
      v-pre: customer text must never be read as a Vue template. Styles: tc-styles (.tc) + yelp-chat-thread (.yc-*). --}}
 <x-admin::layouts>
     <x-slot:title>
@@ -42,7 +42,7 @@
             <div class="tc-top-text">
                 <span class="tc-crumb">Leads</span>
                 <h1>Yelp messages</h1>
-                <p>Every message in the Yelp chats, the customer's and ours, as Zapier delivers them (a few minutes after they are sent). Read-only: reply in Yelp.</p>
+                <p>Every message in the Yelp chats, the customer's and ours, as Zapier delivers them (a few minutes after they are sent). Reply under the chat: it goes to the customer's Yelp inbox through Zapier.</p>
             </div>
             <a href="{{ route('admin.leads.index') }}" class="secondary-button">Back to leads</a>
         </div>
@@ -117,6 +117,7 @@
                         </div>
                         <div class="tc-body">
                             @include('admin::leads.yelp-chat-thread', ['thread' => $thread, 'height' => '560px'])
+                            @include('admin::leads.yelp-reply-box', ['chat' => $current->source_lead_id])
                         </div>
                     @else
                         <div class="tc-body">

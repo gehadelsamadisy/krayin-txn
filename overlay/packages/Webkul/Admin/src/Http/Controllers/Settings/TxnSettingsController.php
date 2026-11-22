@@ -463,6 +463,7 @@ class TxnSettingsController extends Controller
             'webhookUrl' => route('txn.calcom_webhook'),
             'yelpTokenStatus' => TxnSettings::secretStatus('automation.yelp.token'),
             'yelpUrl' => route('txn.yelp_message'),
+            'yelpHookStatus' => TxnSettings::secretStatus('automation.yelp.reply_hook'),
             'engines' => \Webkul\Admin\Support\Automation\Automation::ENGINES,
             'staffEvents' => \Webkul\Admin\Support\Automation\Automation::STAFF_EVENTS,
             'recent' => \Illuminate\Support\Facades\Schema::hasTable('txn_events')

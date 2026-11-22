@@ -35,6 +35,7 @@
         ])
         <div class="tc-body">
             @include('admin::leads.yelp-chat-thread', ['thread' => $thread, 'height' => '380px'])
+            @include('admin::leads.yelp-reply-box', ['chat' => $yelpId])
         </div>
     </section>
 @endif

@@ -55,6 +55,21 @@ final class YelpMessageStore
             return 'duplicate';
         }
 
+        // Our own reply typed in Krayin coming back from Yelp: the row Krayin
+        // saved when sending gets Yelp's event id and time ("matched"), so the
+        // chat shows it once, marked "Seen in Yelp".
+        if (self::fromBusiness($message['user_type'] ?? null) && ($row = $this->pendingReply($message['source_lead_id'], $message['text'] ?? null))) {
+            $this->table()->where('id', $row->id)->update([
+                'event_id' => mb_substr($message['event_id'], 0, 255),
+                'sent_at' => self::utc($message['time'] ?? null) ?? $row->sent_at,
+                'raw_payload' => json_encode(array_merge(self::krayinPart($row), [
+                    'status' => 'confirmed', 'confirmed_at' => now('UTC')->format('Y-m-d H:i:s'), 'yelp' => $raw,
+                ]), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            ]);
+
+            return 'matched';
+        }
+
         try {
             $this->table()->insert([
                 'source_lead_id' => mb_substr($message['source_lead_id'], 0, 255),
@@ -79,6 +94,85 @@ final class YelpMessageStore
         }
 
         return 'stored';
+    }
+
+    /**
+     * A reply typed in Krayin (YelpReplySender), saved before it is handed to
+     * Zapier: event id "krayin-<uuid>" until Yelp's copy comes back, business
+     * sender, already read. raw_payload holds source "krayin", its status
+     * (sending, handed, failed, confirmed) and who sent it. Returns the row id.
+     */
+    public function storeReply(string $sourceLeadId, string $text, string $requestId, array $krayin): int
+    {
+        $now = now('UTC')->format('Y-m-d H:i:s');
+
+        return (int) $this->table()->insertGetId([
+            'source_lead_id' => mb_substr($sourceLeadId, 0, 255),
+            'event_id' => 'krayin-'.$requestId,
+            'user_type' => 'BIZ',
+            'user_name' => self::cut($krayin['user_name'] ?? null, 255),
+            'text' => mb_substr($text, 0, 65000),
+            'sent_at' => $now,
+            'read_at' => $now,
+            'raw_payload' => json_encode(['source' => 'krayin', 'request_id' => $requestId, 'status' => 'sending'] + $krayin, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'received_at' => $now,
+        ]);
+    }
+
+    /** Merges $changes into a Krayin reply's raw_payload (its status, error). */
+    public function updateReply(int $id, array $changes): void
+    {
+        $row = $this->table()->where('id', $id)->first();
+
+        if ($row) {
+            $this->table()->where('id', $id)->update([
+                'raw_payload' => json_encode(array_merge(self::krayinPart($row), $changes), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            ]);
+        }
+    }
+
+    /**
+     * The Krayin reply Yelp's copy belongs to: same chat, same text (spaces
+     * ignored), sent from Krayin in the last 3 days, not matched yet. Oldest first.
+     */
+    private function pendingReply(string $sourceLeadId, ?string $text): ?object
+    {
+        $text = self::sameText($text);
+
+        if ($text === '') {
+            return null;
+        }
+
+        return $this->table()
+            ->where('source_lead_id', $sourceLeadId)
+            ->where('event_id', 'like', 'krayin-%')
+            ->where('received_at', '>=', now('UTC')->subDays(3)->format('Y-m-d H:i:s'))
+            ->orderBy('id')
+            ->get()
+            ->first(fn ($row) => self::sameText($row->text) === $text && (self::reply($row)['status'] ?? null) !== 'confirmed');
+    }
+
+    /**
+     * For a message typed in Krayin: its raw_payload part (source "krayin",
+     * status, user_name, error, ...); null for messages that came from Yelp.
+     */
+    public static function reply(object $row): ?array
+    {
+        $part = self::krayinPart($row);
+
+        return ($part['source'] ?? null) === 'krayin' ? $part : null;
+    }
+
+    private static function krayinPart(object $row): array
+    {
+        $payload = json_decode((string) ($row->raw_payload ?? ''), true);
+
+        return is_array($payload) ? $payload : [];
+    }
+
+    private static function sameText(?string $text): string
+    {
+        return mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', (string) $text)));
     }
 
     /** True when the message was written by the business (not the customer). */

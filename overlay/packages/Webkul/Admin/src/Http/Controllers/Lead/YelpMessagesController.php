@@ -2,21 +2,38 @@
 
 namespace Webkul\Admin\Http\Controllers\Lead;
 
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Throwable;
 use Webkul\Admin\Http\Controllers\Controller;
 use Webkul\Admin\Support\Contact\ServiceHealth;
 use Webkul\Admin\Support\Contact\YelpMessageStore;
+use Webkul\Admin\Support\Contact\YelpReplySender;
 
 /**
  * Leads > Yelp messages: every Yelp conversation saved from Zapier (lead
  * database, yelp_message), newest first, with the chosen one as a chat.
- * Read-only: replies are written in Yelp ("Reply in Yelp"). Opening a chat
- * marks its messages read.
+ * Opening a chat marks its messages read. reply(): a message typed under the
+ * chat (here or on the lead's Yelp card), sent through YelpReplySender.
  */
 class YelpMessagesController extends Controller
 {
+    /** POST leads/yelp-messages/{chat}/reply (permission yelp_messages.reply). Back to the page it came from. */
+    public function reply(Request $request, string $chat, YelpReplySender $sender): RedirectResponse
+    {
+        $result = $sender->send($chat, (string) $request->input('text', ''), auth()->guard('user')->user());
+
+        $back = back();
+
+        // Keep the typed text when nothing was sent, so it isn't lost.
+        if ($result['status'] !== 'sent' && $result['status'] !== 'failed') {
+            $back = $back->withInput($request->only('text'));
+        }
+
+        return $back->with($result['status'] === 'sent' ? 'success' : 'warning', $result['message']);
+    }
+
     public function index(Request $request, YelpMessageStore $store): View
     {
         $show = in_array($request->query('show'), ['unread', 'unmatched'], true) ? $request->query('show') : 'all';

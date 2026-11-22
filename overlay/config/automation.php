@@ -54,5 +54,13 @@ return [
     'yelp' => [
         'enabled' => false,
         'token' => env('YELP_MESSAGES_TOKEN'),
+
+        // Replies typed in Krayin (YelpReplySender): posted to the Zapier
+        // Catch Hook of the reply Zap, which sends them in Yelp. Own switch,
+        // off by default. While the Yelp reply guard (config/txn.php) is on,
+        // only the chats in test_lead_ids (Yelp lead IDs) get replies.
+        'reply_enabled' => false,
+        'reply_hook' => env('YELP_REPLY_HOOK'),
+        'test_lead_ids' => array_values(array_filter(array_map('trim', explode(',', (string) env('YELP_TEST_LEAD_IDS', ''))))),
     ],
 ];

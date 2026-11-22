@@ -15,8 +15,11 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Webkul\Admin\Support\Contact\TxnConnectionTester;
+use Webkul\Admin\Support\Contact\TxnSettings;
 use Webkul\Admin\Support\Contact\YelpMessageStore;
+use Webkul\Admin\Support\Contact\YelpReplySender;
 use Webkul\Contact\Repositories\PersonRepository;
 use Webkul\Lead\Repositories\LeadRepository;
 
@@ -99,6 +102,11 @@ $useTestTable = function () use ($main) {
 DB::beginTransaction();
 
 try {
+    // Values saved on TXN Settings (live) would come back over this script's
+    // config before every job. Set aside for the run; the rollback restores them.
+    DB::table('txn_settings')->delete();
+    TxnSettings::apply();
+
     config(['queue.default' => 'sync', 'cache.default' => 'array', 'automation.yelp.enabled' => false, 'automation.yelp.token' => $token]);
 
     $adminId = DB::table('users')->join('roles', 'roles.id', '=', 'users.role_id')
@@ -211,6 +219,86 @@ try {
     $auto = $page('admin.settings.txn.automation');
     $check('Automation screen: Yelp messages card with the webhook address', str_contains($auto, 'Accept Yelp messages from Zapier') && str_contains($auto, '/txn/yelp-message'));
     $check('Connections screen: Yelp messages database card', str_contains($page('admin.settings.txn.connections'), 'Yelp messages database'));
+
+    // =====================================================================
+    $section = 'Replies from Krayin';
+    // =====================================================================
+    // Zapier's Catch Hook, faked: answers $hookStatus; nothing leaves this machine.
+    $hookUrl = 'https://hooks.zapier.test/hooks/catch/123/yelp-check';
+    $hookStatus = 200;
+    Http::fake(function ($request) use (&$hookStatus, $hookUrl) {
+        return $request->url() === $hookUrl
+            ? Http::response($hookStatus === 200 ? ['status' => 'success'] : 'Zapier down', $hookStatus)
+            : Http::response([], 500);
+    });
+    $hookCalls = fn () => Http::recorded()->filter(fn ($pair) => $pair[0]->url() === $hookUrl)->values();
+    $krayinRows = fn () => $msgs()->where('event_id', 'like', 'krayin-%')->get();
+    $sender = app(YelpReplySender::class);
+    $admin = auth()->guard('user')->user();
+
+    config(['automation.yelp.reply_enabled' => false, 'automation.yelp.reply_hook' => $hookUrl, 'txn.guard_yelp' => true, 'automation.yelp.test_lead_ids' => []]);
+    $result = $sender->send('ychk-1', 'Hello', $admin);
+    $check('Replies off (as shipped) -> not sent, nothing saved, Zapier not called', $result['status'] === 'off' && $hookCalls()->isEmpty() && $krayinRows()->isEmpty(), json_encode($result));
+
+    config(['automation.yelp.reply_enabled' => true]);
+    $result = $sender->send('ychk-1', 'Hello', $admin);
+    $check('Yelp reply guard on, chat not allowed -> blocked, logged, Zapier not called', $result['status'] === 'blocked'
+        && str_contains($result['message'], 'ychk-1') && $hookCalls()->isEmpty() && $krayinRows()->isEmpty() && $events('yelp_reply_blocked')->isNotEmpty(), json_encode($result));
+    $blockedHtml = $page('admin.leads.yelp_messages', ['chat' => 'ychk-1']);
+    $check('... the reply box says why and names the chat ID to allow', str_contains($blockedHtml, 'Reply on Yelp') && str_contains($blockedHtml, 'add <strong>ychk-1</strong>'));
+
+    config(['automation.yelp.test_lead_ids' => ['ychk-1'], 'automation.yelp.reply_hook' => '']);
+    $check('No reply Zap address -> not sent', $sender->send('ychk-1', 'Hello', $admin)['status'] === 'no_hook' && $hookCalls()->isEmpty());
+    config(['automation.yelp.reply_hook' => $hookUrl]);
+
+    // Through the page's form (route, permission, redirect back).
+    $replyRequest = Request::create(route('admin.leads.yelp_messages.reply', ['chat' => 'ychk-1'], false), 'POST', ['text' => "We can come  Tuesday at 11 AM.\r\nSee you then!"]);
+    app()->instance('request', $replyRequest);
+    $replyStatus = $kernel->handle($replyRequest)->getStatusCode();
+    $sentRow = $krayinRows()->first();
+    $sentPart = $sentRow ? YelpMessageStore::reply($sentRow) : null;
+    $call = $hookCalls()->first();
+    $check('Allowed test chat: Send -> saved in the chat as ours, already read, status "handed"', $replyStatus === 302 && $sentRow
+        && YelpMessageStore::fromBusiness($sentRow->user_type) && $sentRow->read_at !== null && $sentRow->source_lead_id === 'ychk-1'
+        && ($sentPart['status'] ?? null) === 'handed' && ($sentPart['user_name'] ?? null) === $admin->name, json_encode([$replyStatus, $sentRow]));
+    $check('... posted once to the reply Zap: lead_id, text, request_id, sent_by, sent_at', $hookCalls()->count() === 1 && $call
+        && $call[0]['lead_id'] === 'ychk-1' && $call[0]['text'] === "We can come  Tuesday at 11 AM.\nSee you then!"
+        && $call[0]['request_id'] === ($sentPart['request_id'] ?? '') && $call[0]['sent_by'] === $admin->name && ! empty($call[0]['sent_at']), json_encode($call ? $call[0]->data() : null));
+    $replyEvent = $events('yelp_reply_sent')->first();
+    $check('... "Yelp reply sent from Krayin" in the event log, by the user, on the lead', $replyEvent && (int) $replyEvent->lead_id === (int) $lead->id && (int) $replyEvent->user_id === (int) $admin->id, json_encode($replyEvent));
+    $sentHtml = $page('admin.leads.yelp_messages', ['chat' => 'ychk-1']);
+    $check('... the chat shows it at once, "waiting for Yelp", with the reply box', str_contains($sentHtml, 'See you then!') && str_contains($sentHtml, 'waiting for Yelp')
+        && str_contains($sentHtml, route('admin.leads.yelp_messages.reply', ['chat' => 'ychk-1'], false)));
+    $check('... the lead card has the reply box too', str_contains($page('admin.leads.view', ['id' => $lead->id]), 'Reply on Yelp'));
+
+    // The New Message Zap brings Yelp's copy back (spacing may differ).
+    [$status, $body] = $post(['lead_id' => 'ychk-1', 'event_id' => 'ev-echo', 'user_type' => 'BIZ', 'user' => 'TXN Roofing', 'text' => "We can come Tuesday at 11 AM. See you then!", 'time' => '2026-11-22T11:00:00Z']);
+    $echoed = $msgs()->where('source_lead_id', 'ychk-1')->where('text', 'like', '%See you then!%')->get();
+    $check('Yelp\'s copy comes back -> "matched": still one message, with Yelp\'s event id, "Seen in Yelp"', $status === 200 && ($body['message'] ?? '') === 'matched'
+        && $echoed->count() === 1 && $echoed->first()->event_id === 'ev-echo' && (YelpMessageStore::reply($echoed->first())['status'] ?? null) === 'confirmed', json_encode([$body, $echoed]));
+    $check('... the chat shows "Seen in Yelp"', str_contains($page('admin.leads.yelp_messages', ['chat' => 'ychk-1']), 'Seen in Yelp'));
+    [$status, $body] = $post(['lead_id' => 'ychk-1', 'event_id' => 'ev-echo', 'user_type' => 'BIZ', 'text' => 'We can come Tuesday at 11 AM. See you then!']);
+    $check('... the same copy again -> "duplicate"', ($body['message'] ?? '') === 'duplicate', json_encode($body));
+    [$status, $body] = $post(['lead_id' => 'ychk-1', 'event_id' => 'ev-yelp-typed', 'user_type' => 'BIZ', 'text' => 'Typed in Yelp itself.']);
+    $check('A message we typed in Yelp itself is still stored normally', ($body['message'] ?? '') === 'stored', json_encode($body));
+
+    $hookStatus = 500;
+    $result = $sender->send('ychk-1', 'This one fails.', $admin);
+    $failedRow = $krayinRows()->first(fn ($row) => $row->text === 'This one fails.');
+    $check('Zapier error -> "Not sent" with the error, kept in the chat, logged', $result['status'] === 'failed' && $failedRow
+        && (YelpMessageStore::reply($failedRow)['status'] ?? null) === 'failed' && str_contains(YelpMessageStore::reply($failedRow)['error'] ?? '', 'HTTP 500')
+        && $events('yelp_reply_failed')->isNotEmpty(), json_encode($result));
+    $check('... the chat shows "Not sent: Zapier answered HTTP 500"', str_contains($page('admin.leads.yelp_messages', ['chat' => 'ychk-1']), 'Not sent: Zapier answered HTTP 500'));
+    $hookStatus = 200;
+
+    $check('Empty or too long text -> refused before anything is saved', $sender->send('ychk-1', '   ', $admin)['status'] === 'invalid'
+        && $sender->send('ychk-1', str_repeat('x', YelpReplySender::MAX_LENGTH + 1), $admin)['status'] === 'invalid');
+    config(['txn.guard_yelp' => false]);
+    $check('Yelp reply guard off -> any chat may get a reply', YelpReplySender::allowed('ychk-unknown'));
+    config(['txn.guard_yelp' => true]);
+    $check('Safety screen: "Yelp replies" card with its guard and test list', str_contains($safety = $page('admin.settings.txn.safety'), 'Yelp replies') && str_contains($safety, 'Allowed test Yelp chats'));
+    $check('Automation screen: reply switch and the reply Zap address', str_contains($auto2 = $page('admin.settings.txn.automation'), 'Send replies typed in Krayin to Yelp') && str_contains($auto2, 'Catch Hook'));
+    $check('No call left this machine except the faked reply Zap', Http::recorded()->every(fn ($pair) => $pair[0]->url() === $hookUrl));
 
     // =====================================================================
     $section = 'Connections test and failures';

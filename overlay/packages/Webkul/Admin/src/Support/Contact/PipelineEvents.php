@@ -50,6 +50,9 @@ final class PipelineEvents
         'engine_switched' => ['Engine switched', 'automation'],
         'yelp_message_received' => ['Yelp message received', 'messages'],
         'yelp_message_sent' => ['Yelp message sent by us', 'messages'],
+        'yelp_reply_sent' => ['Yelp reply sent from Krayin', 'messages'],
+        'yelp_reply_failed' => ['Yelp reply not sent', 'messages'],
+        'yelp_reply_blocked' => ['Yelp reply blocked by the guard', 'messages'],
     ];
 
     public const GROUPS = [

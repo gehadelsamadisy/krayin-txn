@@ -176,7 +176,7 @@
                 @include('admin::settings.txn.partials.card-head', [
                     'icon' => 'message',
                     'title' => 'Yelp messages',
-                    'text' => 'Zapier sends every Yelp chat message (the customer\'s and ours); Krayin saves it in the lead database (yelp_message) and shows it on the lead and on Leads > Yelp messages. Receiving only: nothing is sent to customers. Own switch: not affected by the master switch.',
+                    'text' => 'Zapier sends every Yelp chat message (the customer\'s and ours); Krayin saves it in the lead database (yelp_message) and shows it on the lead and on Leads > Yelp messages. Replies typed in Krayin go out through a second Zap (below). Own switches: not affected by the master switch.',
                     'aside' => '<span class="tc-status '.($yelpOn ? 'is-on">Listening' : 'is-off">Off').'</span>',
                 ])
                 <div class="tc-body">
@@ -201,6 +201,23 @@
 
                     <p class="tc-note">@include('admin::settings.txn.partials.icon', ['name' => 'info', 'size' => 15])
                         <span>The Zap: trigger <strong>Yelp &gt; New Message</strong>, action <strong>Webhooks by Zapier &gt; POST</strong>, payload JSON with <strong>lead_id, event_id, user_type, user, text, time, attachment_url, attachment_text</strong>. The messages database login is on <strong>Connections &gt; Yelp messages database</strong>.</span>
+                    </p>
+
+                    {{-- Replies from Krayin (YelpReplySender) --}}
+                    <hr style="border: 0; border-top: 1px solid var(--tc-line); margin: 4px 0;">
+                    @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.yelp.reply_enabled', 'switchLabel' => 'Send replies typed in Krayin to Yelp'])
+
+                    <div class="tc-grid">
+                        <div class="tc-field tc-wide">
+                            <label for="f-yelp-hook" class="tc-label">{{ $fields['automation.yelp.reply_hook'][2] }}</label>
+                            <input id="f-yelp-hook" type="password" name="{{ $inputNames['automation.yelp.reply_hook'] }}" class="tc-input" autocomplete="new-password"
+                                placeholder="{{ $yelpHookStatus['source'] === 'none' ? 'Not set: paste the https://hooks.zapier.com/... address' : 'Set ('.$yelpHookStatus['ends'].'): leave empty to keep it' }}" @disabled(! $canEdit)>
+                            <p class="tc-help">Kept secret: anyone with this address could make the Zap write in Yelp.</p>
+                        </div>
+                    </div>
+
+                    <p class="tc-note">@include('admin::settings.txn.partials.icon', ['name' => 'info', 'size' => 15])
+                        <span>The reply Zap: trigger <strong>Webhooks by Zapier &gt; Catch Hook</strong> (copy its address here), action <strong>Yelp Leads</strong> send-message, with the Yelp lead ID = <strong>lead_id</strong> and the message = <strong>text</strong>. Krayin also sends <strong>request_id</strong>, <strong>sent_by</strong> and <strong>sent_at</strong>. The reply shows in the chat at once and is marked "Seen in Yelp" when the New Message Zap brings it back. While the <strong>Yelp reply guard</strong> is on (Safety), only the allowed test chats can get a reply.</span>
                     </p>
                 </div>
             </section>

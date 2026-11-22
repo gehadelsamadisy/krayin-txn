@@ -40,7 +40,7 @@ final class TxnSettings
     ];
 
     /** Guards on the Safety screen: turning one off needs this typed confirmation. */
-    public const GUARDS = ['txn.guard_email' => 'Email guard', 'txn.guard_sms' => 'SMS guard', 'txn.guard_calcom' => 'Cal.com guard'];
+    public const GUARDS = ['txn.guard_email' => 'Email guard', 'txn.guard_sms' => 'SMS guard', 'txn.guard_calcom' => 'Cal.com guard', 'txn.guard_yelp' => 'Yelp reply guard'];
 
     public const GUARD_OFF_CONFIRMATION = 'SEND TO CUSTOMERS';
 
@@ -302,6 +302,8 @@ final class TxnSettings
             'calcom.test_person_ids' => ['safety', 'ids', 'Test contacts (contact IDs)', ['max_items' => 50]],
             'calcom.test_recipient_emails' => ['safety', 'emails', 'Test recipient emails', ['max_items' => 50]],
             'calcom.single_test_attempt' => ['safety', 'bool', 'Only one booking-link email per test', []],
+            'txn.guard_yelp' => ['safety', 'guard', 'Yelp reply guard', []],
+            'automation.yelp.test_lead_ids' => ['safety', 'ids', 'Allowed test Yelp chats (Yelp lead IDs)', ['max_items' => 50]],
 
             // Automation (Support\Automation\Automation). All off by default.
             'automation.enabled' => ['automation', 'bool', 'Automation (master switch)', []],
@@ -325,6 +327,8 @@ final class TxnSettings
             'automation.webhook.secret' => ['automation', 'secret', 'Cal.com webhook secret', ['min' => 16]],
             'automation.yelp.enabled' => ['automation', 'bool', 'Yelp messages', []],
             'automation.yelp.token' => ['automation', 'secret', 'Yelp messages token (X-TXN-Token in the Zap)', ['min' => 16]],
+            'automation.yelp.reply_enabled' => ['automation', 'bool', 'Yelp replies from Krayin', []],
+            'automation.yelp.reply_hook' => ['automation', 'secret', 'Reply Zap address (Webhooks by Zapier > Catch Hook URL)', ['min' => 30]],
         ];
 
         foreach (self::EMAIL_PARTS as $group => [$title, $parts]) {

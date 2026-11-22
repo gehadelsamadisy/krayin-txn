@@ -173,7 +173,7 @@ in an **Events** card on each lead and contact. Kept forever.
 
 Check: `tests/automation-check.php` (run by `scripts/test-on-copy.sh`).
 
-## Yelp messages (receiving only)
+## Yelp messages (receiving and replying)
 
 A Zap (trigger **Yelp > New Message**, action **Webhooks by Zapier > POST**)
 sends every Yelp chat message, the customer's and ours, to
@@ -199,7 +199,29 @@ attachment_text`.
   - A **Yelp messages** button with an unread badge on the leads list.
   - Opening a chat marks it read.
   - **Reply in Yelp** opens the lead's `reply_url` from the lead database.
-- **Read-only:** nothing is sent to customers.
+- **Replying from Krayin** (`YelpReplySender`, permission `yelp_messages.reply`):
+  - A reply box under the chat (Leads > Yelp messages and the lead card) posts
+    to `POST admin/leads/yelp-messages/{chat}/reply`.
+  - Krayin can't write in Yelp (Yelp's API is for approved partners), so the
+    reply goes to a second Zap: **Webhooks by Zapier > Catch Hook** -> **Yelp
+    Leads** send-message action. Krayin posts JSON `lead_id, text, request_id,
+    sent_by, sent_at`.
+  - Order: switch -> **Yelp reply guard** (Safety; only the Yelp lead IDs in
+    "Allowed test Yelp chats"; on unless `TXN_GUARD_YELP=false`) -> reply Zap
+    address -> saved in `yelp_message` as ours (event id `krayin-<uuid>`,
+    `raw_payload.source = krayin`) -> posted to the hook.
+  - Status under the bubble: Sending… / Sent to Zapier · waiting for Yelp /
+    ✓ Seen in Yelp / Not sent: <error>. After 30 minutes without Yelp's copy:
+    "not seen in Yelp yet: check the reply Zap's history".
+  - When the New Message Zap brings our reply back (same chat, same text,
+    spacing ignored, within 3 days), the saved row takes Yelp's event id and is
+    marked confirmed: the webhook answers "matched" and the chat shows it once.
+  - Event log: "Yelp reply sent from Krayin" (with who), "Yelp reply not
+    sent", "Yelp reply blocked by the guard".
+  - Settings: Automation > Yelp messages (switch "Send replies typed in Krayin
+    to Yelp", ships off; reply Zap address, secret); Safety > **Yelp replies**
+    (guard, allowed test chats). `.env`: `YELP_REPLY_HOOK`,
+    `YELP_TEST_LEAD_IDS`, `TXN_GUARD_YELP`.
 - **Event log:** "Yelp message received" / "Yelp message sent by us".
 - **Settings:**
   - Settings > TXN Settings > Automation > **Yelp messages** (switch, ships off; token; the webhook address to copy)

@@ -51,6 +51,15 @@
                         'calcom.single_test_attempt' => 'Stops after one booking-link email, so a test can\'t be repeated by accident.',
                     ],
                 ],
+                'yelp' => [
+                    'guard' => 'txn.guard_yelp',
+                    'title' => 'Yelp replies',
+                    'mark' => 'Ye',
+                    'on' => 'Replies typed in Krayin go only to the allowed test Yelp chats below. Any other chat gets nothing, and the attempt is logged.',
+                    'off' => 'Replies typed in Krayin go to any Yelp customer.',
+                    'lists' => ['automation.yelp.test_lead_ids' => 'Yelp lead IDs, one per line. Each chat shows its ID under the reply box (the demo chats are DEMO-1, DEMO-2 and DEMO-3).'],
+                    'options' => [],
+                ],
             ];
             $listText = fn ($key) => implode("\n", array_map('strval', (array) old($inputNames[$key], $values[$key] ?? [])));
             $initialGuards = collect($cards)->mapWithKeys(fn ($card, $id) => [$id => (bool) $values[$card['guard']]])->all();
@@ -199,7 +208,7 @@
                         confirm: '',
                         initial: @json($initialGuards),
                         guards: @json($initialGuards),
-                        names: { email: 'email guard', sms: 'SMS guard', calcom: 'booking-link guard' },
+                        names: { email: 'email guard', sms: 'SMS guard', calcom: 'booking-link guard', yelp: 'Yelp reply guard' },
                     };
                 },
 

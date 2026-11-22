@@ -16,6 +16,16 @@
         .tc .yc-thumb { display: block; margin-top: 6px; max-width: 220px; max-height: 220px; border-radius: 8px; }
         .tc .yc-when { font-size: 11px; color: var(--tc-muted); margin: 3px 6px 0; }
         .tc .yc-empty { padding: 28px 12px; text-align: center; color: var(--tc-muted); }
+        /* Replies typed in Krayin: where they are (sending, waiting for Yelp, seen in Yelp, not sent). */
+        .tc .yc-state { font-size: 11px; color: var(--tc-muted); margin: 1px 6px 0; }
+        .tc .yc-state.is-ok { color: var(--tc-ok); }
+        .tc .yc-state.is-bad { color: var(--tc-bad); font-weight: 600; }
+        /* Reply box under the chat. */
+        .tc .yc-reply { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+        .tc .yc-reply textarea { width: 100%; min-height: 70px; resize: vertical; }
+        .tc .yc-reply-bar { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+        .tc .yc-reply-note { font-size: 12px; color: var(--tc-muted); }
+        .tc .yc-reply-note.is-warn { color: var(--tc-warn); }
     </style>
 @endPushOnce
 
@@ -40,6 +50,27 @@
                 @endif
             </div>
             <span class="yc-when" title="{{ $tzLabel }}">{{ $when?->format('D M j, g:i A') }}</span>
+            @if ($us && ($reply = \Webkul\Admin\Support\Contact\YelpMessageStore::reply($m)))
+                @php
+                    $status = $reply['status'] ?? 'sending';
+                    $age = $m->received_at ? \Carbon\CarbonImmutable::parse($m->received_at, 'UTC')->diffInMinutes(now('UTC')) : 0;
+                @endphp
+                <span class="yc-state {{ $status === 'failed' || ($status === 'sending' && $age >= 5) ? 'is-bad' : ($status === 'confirmed' ? 'is-ok' : '') }}">
+                    @if ($status === 'confirmed')
+                        ✓ Seen in Yelp · typed in Krayin
+                    @elseif ($status === 'failed')
+                        Not sent: {{ mb_strimwidth((string) ($reply['error'] ?? 'unknown error'), 0, 160, '…') }}
+                    @elseif ($status === 'sending' && $age >= 5)
+                        Not sent: Krayin stopped while sending
+                    @elseif ($status === 'sending')
+                        Sending…
+                    @elseif ($age >= 30)
+                        Sent to Zapier, not seen in Yelp yet: check the reply Zap's history
+                    @else
+                        Sent to Zapier · waiting for Yelp
+                    @endif
+                </span>
+            @endif
         </div>
     @empty
         <div class="yc-empty">No messages in this conversation yet.</div>
