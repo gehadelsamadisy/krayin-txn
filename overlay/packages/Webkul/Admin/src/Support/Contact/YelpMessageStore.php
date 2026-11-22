@@ -110,16 +110,29 @@ final class YelpMessageStore
      */
     public function conversations(int $limit = 200): Collection
     {
-        $latest = $this->table()
+        // Two plain queries, no self-join (MySQL can't open a TEMPORARY table
+        // twice in one query, which the check script uses).
+        $groups = $this->table()
             ->selectRaw('source_lead_id, MAX(id) AS last_id, COUNT(*) AS messages')
-            ->groupBy('source_lead_id');
-
-        $rows = DB::connection(self::CONNECTION)->table(self::TABLE.' as m')
-            ->joinSub($latest, 'c', 'c.last_id', '=', 'm.id')
-            ->select('m.source_lead_id', 'm.text', 'm.attachment_url', 'm.user_type', 'm.user_name', 'm.sent_at', 'm.received_at', 'c.messages')
-            ->orderByDesc('m.id')
+            ->groupBy('source_lead_id')
+            ->orderByDesc('last_id')
             ->limit($limit)
             ->get();
+
+        $last = $this->table()
+            ->whereIn('id', $groups->pluck('last_id'))
+            ->get(['id', 'source_lead_id', 'text', 'attachment_url', 'user_type', 'user_name', 'sent_at', 'received_at'])
+            ->keyBy('id');
+
+        $rows = $groups
+            ->filter(fn ($group) => isset($last[$group->last_id]))
+            ->map(function ($group) use ($last) {
+                $row = clone $last[$group->last_id];
+                $row->messages = (int) $group->messages;
+
+                return $row;
+            })
+            ->values();
 
         $unread = $this->table()
             ->whereIn('source_lead_id', $rows->pluck('source_lead_id'))
