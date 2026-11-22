@@ -151,6 +151,11 @@ try {
     $check('... emailed to the test address only', $mails()->contains($test) && $mails()->every(fn ($to) => $to === $test), $mails()->implode(' | '));
     $sentCopy = DB::table('emails')->where('lead_id', $lead2->id)->where('folders', 'like', '%"sent"%')->first();
     $check('... and a copy is in Krayin Mail > Sent, on the contact and the lead', $sentCopy && (int) $sentCopy->person_id === (int) $person->id && str_contains((string) $sentCopy->reply_to, $test) && $sentCopy->subject !== '' && ! str_contains((string) $sentCopy->reply, '<html'), json_encode($sentCopy));
+    $mailPage = $sentCopy ? $kernel->handle(Request::create(route('admin.mail.view', ['route' => 'sent', 'id' => $sentCopy->id], false), 'GET')) : null;
+    $check('... its Mail page links the person (name, avatar, arrow, lead card) to their page, not the edit form',
+        $mailPage && $mailPage->getStatusCode() === 200
+        && substr_count($mailPage->getContent(), "contacts/persons/view/:id'") >= 4
+        && ! str_contains($mailPage->getContent(), "contacts/persons/edit/:id'"), $mailPage ? 'HTTP '.$mailPage->getStatusCode() : 'no copy');
     $check('... lead moved to Contacted', $stageCode($lead2) === 'contacted', (string) $stageCode($lead2));
     $check('... follow-ups started', DB::table('txn_follow_ups')->where('lead_id', $lead2->id)->exists());
     $check('... no text (SMS engine off)', $twilioCalls() === 0);

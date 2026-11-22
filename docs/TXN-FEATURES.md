@@ -220,6 +220,9 @@ email (`BookingEmail::send`).
 - **Staff notifications are not copied.**
 - **No workflows:** the copy is written with the Email model directly, without
   Krayin's `email.create` events, so no workflow or participant email reacts to it.
+- **Person links:** on any email's page (`mail/view.blade.php`, a copy of
+  Krayin's), the linked contact's name, avatar and arrow, and the person on
+  the lead card, open the person's page (Krayin opened the edit form in a new tab).
 
 Check: `tests/automation-check.php`.
 
