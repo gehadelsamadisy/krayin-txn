@@ -90,8 +90,18 @@ class YelpMessagesController extends Controller
             }
         }
 
-        $current = $conversations->firstWhere('source_lead_id', $chosen)
-            ?? ($chosen !== '' ? (object) ['source_lead_id' => $chosen, 'lead' => YelpMessageStore::leadsFor([$chosen])->first(), 'name' => 'Yelp lead '.$chosen] : null);
+        // A chat without messages yet (New chat, or the Chat button on a lead / contact).
+        $current = $conversations->firstWhere('source_lead_id', $chosen);
+
+        if (! $current && $chosen !== '') {
+            $chosenLead = YelpMessageStore::leadsFor([$chosen])->first();
+            $current = (object) ['source_lead_id' => $chosen, 'lead' => $chosenLead, 'name' => $chosenLead?->person?->name ?: 'Yelp lead '.$chosen];
+        }
+
+        // "New chat": Yelp leads in Krayin, found by the contact's name or the lead title.
+        $newChat = $request->boolean('new');
+        $find = trim((string) $request->query('find', ''));
+        $picker = $newChat ? self::yelpLeads($find) : collect();
 
         return view('admin::leads.yelp-messages', [
             'conversations' => $conversations,
@@ -100,9 +110,39 @@ class YelpMessagesController extends Controller
             'thread' => $thread,
             'replyUrl' => self::replyUrl($current?->source_lead_id),
             'filters' => compact('show', 'q', 'chosen'),
+            'newChat' => $newChat,
+            'find' => $find,
+            'picker' => $picker,
+            'withMessages' => $conversations->pluck('source_lead_id')->flip(),
             'receiving' => (bool) config('automation.yelp.enabled'),
             'error' => $error,
         ]);
+    }
+
+    /**
+     * Yelp leads in Krayin (title tag "[TXN-YELP-<id>]"), newest first, with
+     * their contact; filtered by contact name or lead title. Each row:
+     * source_lead_id, lead, name.
+     */
+    public static function yelpLeads(string $find = '', int $limit = 30): \Illuminate\Support\Collection
+    {
+        $like = '%'.addcslashes($find, '%_\\').'%';
+
+        return \Webkul\Lead\Models\Lead::query()->with('person')
+            ->where('title', 'like', '%[TXN-YELP-%')
+            ->when($find !== '', fn ($query) => $query->where(fn ($q) => $q
+                ->where('title', 'like', $like)
+                ->orWhereHas('person', fn ($p) => $p->where('name', 'like', $like))))
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get()
+            ->map(fn ($lead) => (object) [
+                'source_lead_id' => YelpMessageStore::sourceLeadId($lead),
+                'lead' => $lead,
+                'name' => $lead->person?->name ?: $lead->title,
+            ])
+            ->filter(fn ($row) => $row->source_lead_id)
+            ->values();
     }
 
     /**

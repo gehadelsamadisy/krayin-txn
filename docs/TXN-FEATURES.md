@@ -199,6 +199,10 @@ attachment_text`.
   - A **Yelp messages** button with an unread badge on the leads list.
   - Opening a chat marks it read.
   - **Reply in Yelp** opens the lead's `reply_url` from the lead database.
+  - **Starting a chat** (also before any message): **New chat** on Leads >
+    Yelp messages searches the Yelp leads in Krayin by contact or lead title;
+    a **Yelp chat** button on a Yelp lead's page and on its contact's page
+    (one per Yelp lead) opens `?chat=<Yelp lead id>`.
 - **Replying from Krayin** (`YelpReplySender`, permission `yelp_messages.reply`):
   - A reply box under the chat (Leads > Yelp messages and the lead card) posts
     to `POST admin/leads/yelp-messages/{chat}/reply`.

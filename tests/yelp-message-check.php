@@ -128,6 +128,14 @@ try {
         'lead_pipeline_stage_id' => (int) DB::table('lead_pipeline_stages')->where('lead_pipeline_id', $pipeline)->orderBy('sort_order')->value('id'),
         'person' => ['id' => $person->id],
     ]);
+    // A second Yelp lead of the same customer, without any message yet (New chat / Yelp chat button).
+    $quietLead = app(LeadRepository::class)->create([
+        'entity_type' => 'leads', 'title' => 'Gutter cleaning - Yelp Check Customer [TXN-YELP-ychk-2]', 'lead_value' => 0, 'status' => 1,
+        'lead_source_id' => $import['source_id'], 'lead_type_id' => $import['type_id'], 'user_id' => $import['owner_id'],
+        'lead_pipeline_id' => $pipeline,
+        'lead_pipeline_stage_id' => (int) DB::table('lead_pipeline_stages')->where('lead_pipeline_id', $pipeline)->orderBy('sort_order')->value('id'),
+        'person' => ['id' => $person->id],
+    ]);
 
     $useTestTable();
 
@@ -219,6 +227,23 @@ try {
     $auto = $page('admin.settings.txn.automation');
     $check('Automation screen: Yelp messages card with the webhook address', str_contains($auto, 'Accept Yelp messages from Zapier') && str_contains($auto, '/txn/yelp-message'));
     $check('Connections screen: Yelp messages database card', str_contains($page('admin.settings.txn.connections'), 'Yelp messages database'));
+
+    // =====================================================================
+    $section = 'Starting a chat';
+    // =====================================================================
+    $inbox = $page('admin.leads.yelp_messages');
+    $check('Yelp messages page has a "New chat" button', str_contains($inbox, 'New chat') && str_contains($inbox, route('admin.leads.yelp_messages', ['new' => 1], false)));
+    $picked = $page('admin.leads.yelp_messages', ['new' => 1, 'find' => 'Yelp Check']);
+    $check('New chat: search finds the customer\'s Yelp leads, also the one without messages', str_contains($picked, 'Gutter cleaning - Yelp Check Customer')
+        && str_contains($picked, e(route('admin.leads.yelp_messages', ['chat' => 'ychk-2'], false))) && str_contains($picked, 'has messages'));
+    $check('... a search that matches nothing says so', str_contains($page('admin.leads.yelp_messages', ['new' => 1, 'find' => 'zz-nobody-zz']), 'No Yelp lead matches'));
+    $quietChat = $page('admin.leads.yelp_messages', ['chat' => 'ychk-2']);
+    $check('A chat with no messages yet opens with the contact\'s name, "No messages" and the reply box', str_contains($quietChat, 'Yelp Check Customer')
+        && str_contains($quietChat, 'No messages in this conversation yet') && str_contains($quietChat, 'Reply on Yelp'));
+    $check('Lead page: "Yelp chat" button opening that lead\'s chat', str_contains($page('admin.leads.view', ['id' => $quietLead->id]), e(route('admin.leads.yelp_messages', ['chat' => 'ychk-2'], false))));
+    $personHtml = $page('admin.contacts.persons.view', ['id' => $person->id]);
+    $check('Contact page: one "Yelp chat" button per Yelp lead', str_contains($personHtml, e(route('admin.leads.yelp_messages', ['chat' => 'ychk-1'], false)))
+        && str_contains($personHtml, e(route('admin.leads.yelp_messages', ['chat' => 'ychk-2'], false))) && str_contains($personHtml, 'Yelp chat: '));
 
     // =====================================================================
     $section = 'Replies from Krayin';

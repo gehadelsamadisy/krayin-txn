@@ -44,7 +44,10 @@
                 <h1>Yelp messages</h1>
                 <p>Every message in the Yelp chats, the customer's and ours, as Zapier delivers them (a few minutes after they are sent). Reply under the chat: it goes to the customer's Yelp inbox through Zapier.</p>
             </div>
-            <a href="{{ route('admin.leads.index') }}" class="secondary-button">Back to leads</a>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <a href="{{ route('admin.leads.yelp_messages', ['new' => 1]) }}" class="primary-button">New chat</a>
+                <a href="{{ route('admin.leads.index') }}" class="secondary-button">Back to leads</a>
+            </div>
         </div>
 
         @if (! $receiving)
@@ -59,6 +62,41 @@
             </div>
         @else
             <div class="tc yc-inbox">
+                @if ($newChat)
+                {{-- New chat: pick a Yelp lead in Krayin (YelpMessagesController::yelpLeads) --}}
+                <section class="tc-card is-plain">
+                    <div class="tc-body" style="gap: 10px;">
+                        <div class="yc-chat-head">
+                            <strong>New chat</strong>
+                            <a href="{{ route('admin.leads.yelp_messages') }}" class="tc-btn">Cancel</a>
+                        </div>
+                        <form method="GET" action="{{ route('admin.leads.yelp_messages') }}">
+                            <input type="hidden" name="new" value="1">
+                            <input type="search" name="find" value="{{ $find }}" class="tc-input" placeholder="Search a contact or lead" style="width: 100%;" autofocus>
+                        </form>
+                        <p class="tc-help" style="margin: 0;">Yelp leads in Krayin only: Yelp chat works with Yelp customers. Angi customers are reached by email and text.</p>
+                    </div>
+                    <div class="yc-list">
+                        @forelse ($picker as $row)
+                            <a href="{{ route('admin.leads.yelp_messages', ['chat' => $row->source_lead_id]) }}" class="yc-item">
+                                <div class="yc-item-main">
+                                    <div class="yc-item-top">
+                                        <span class="yc-item-name">{{ $row->name }}</span>
+                                        @if (isset($withMessages[$row->source_lead_id]))
+                                            <span class="yc-item-time">has messages</span>
+                                        @endif
+                                    </div>
+                                    <div class="yc-item-text">{{ $row->lead->title }}</div>
+                                </div>
+                            </a>
+                        @empty
+                            <div style="padding: 28px 14px; text-align: center; color: var(--tc-muted);">
+                                {{ $find !== '' ? 'No Yelp lead matches "'.$find.'".' : 'No Yelp leads in Krayin yet.' }}
+                            </div>
+                        @endforelse
+                    </div>
+                </section>
+                @else
                 {{-- Conversations --}}
                 <section class="tc-card is-plain">
                     <div class="tc-body" style="gap: 10px;">
@@ -97,6 +135,7 @@
                         @endforelse
                     </div>
                 </section>
+                @endif
 
                 {{-- Chosen conversation --}}
                 <section class="tc-card is-plain">

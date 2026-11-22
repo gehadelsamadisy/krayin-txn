@@ -152,6 +152,10 @@ class AppServiceProvider extends ServiceProvider
         Event::listen('admin.leads.view.activities.after', fn ($view) => $view->addTemplate('admin::leads.events-card'));
         Event::listen('admin.contact.persons.view.right.after', fn ($view) => $view->addTemplate('admin::leads.events-card'));
 
+        // "Yelp chat" button on Yelp leads and their contacts: opens the chat, even before any message.
+        Event::listen('admin.leads.view.actions.before', fn ($view) => $view->addTemplate('admin::leads.yelp-chat-button'));
+        Event::listen('admin.contact.persons.view.actions.before', fn ($view) => $view->addTemplate('admin::leads.yelp-chat-button'));
+
         // Re-run the lead check when the contact or lead is edited, so
         // "Missing Info" etc. follow the new phone/address. Lead edits count
         // only from the edit form and the inline fields: a stage change must
