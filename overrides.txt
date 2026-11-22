@@ -31,3 +31,4 @@ config/logging.php
 packages/Webkul/Admin/src/Http/Controllers/Lead/LeadController.php
 packages/Webkul/Admin/src/Resources/views/leads/index/kanban.blade.php
 packages/Webkul/Admin/src/Resources/views/mail/view.blade.php
+packages/Webkul/Admin/src/DataGrids/Mail/EmailDataGrid.php
