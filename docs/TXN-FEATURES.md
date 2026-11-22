@@ -223,6 +223,10 @@ email (`BookingEmail::send`).
 - **Person links:** on any email's page (`mail/view.blade.php`, a copy of
   Krayin's), the linked contact's name, avatar and arrow, and the person on
   the lead card, open the person's page (Krayin opened the edit form in a new tab).
+- **"To" in the list:** Mail > Sent, Drafts and Outbox show the recipient
+  (the linked contact's name, else the first address) under "To" instead of
+  our own name under "From" (`DataGrids/Mail/EmailDataGrid.php`, a copy of
+  Krayin's). Inbox and Trash keep "From".
 
 Check: `tests/automation-check.php`.
 

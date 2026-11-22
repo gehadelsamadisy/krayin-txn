@@ -162,6 +162,16 @@ try {
         $mailPage && $mailPage->getStatusCode() === 200
         && substr_count($mailPage->getContent(), "contacts/persons/view/:id'") >= 4
         && ! str_contains($mailPage->getContent(), "contacts/persons/edit/:id'"), $mailPage ? 'HTTP '.$mailPage->getStatusCode() : 'no copy');
+    $sentList = null;
+    if ($sentCopy) {
+        $listRequest = Request::create(route('admin.mail.index', ['route' => 'sent'], false), 'GET', ['filters' => ['id' => [$sentCopy->id]]]);
+        $listRequest->headers->set('X-Requested-With', 'XMLHttpRequest');
+        $sentList = json_decode($kernel->handle($listRequest)->getContent(), true);
+    }
+    $sentRow = collect($sentList['records'] ?? [])->firstWhere('id', $sentCopy?->id);
+    $check('... Mail > Sent lists it under "To" with the contact\'s name (not ours as "From")',
+        (collect($sentList['columns'] ?? [])->firstWhere('index', 'name')['label'] ?? null) === 'To' && $sentRow && $sentRow['name'] === $person->name,
+        json_encode(['row' => $sentRow, 'columns' => collect($sentList['columns'] ?? [])->pluck('label', 'index')]));
     $check('... lead moved to Contacted', $stageCode($lead2) === 'contacted', (string) $stageCode($lead2));
     $check('... follow-ups started', DB::table('txn_follow_ups')->where('lead_id', $lead2->id)->exists());
     $check('... no text (SMS engine off)', $twilioCalls() === 0);
