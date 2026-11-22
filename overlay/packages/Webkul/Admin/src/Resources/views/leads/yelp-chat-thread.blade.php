@@ -4,7 +4,8 @@
     <style>
         /* column-reverse + newest first in the HTML: oldest at the top, and the box opens scrolled to the newest. */
         .tc .yc-thread { display: flex; flex-direction: column-reverse; gap: 10px; padding: 16px; overflow-y: auto; background: var(--tc-band); border-radius: 10px; }
-        .tc .yc-row { display: flex; flex-direction: column; max-width: min(78%, 560px); }
+        /* A row is only as wide as its bubble: customer on the left, us on the right. */
+        .tc .yc-row { display: flex; flex-direction: column; align-items: flex-start; align-self: flex-start; max-width: min(75%, 520px); }
         .tc .yc-row.is-us { align-self: flex-end; align-items: flex-end; }
         .tc .yc-who { font-size: 12px; color: var(--tc-muted); margin: 0 6px 3px; }
         .tc .yc-bubble { padding: 9px 13px; border-radius: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere;

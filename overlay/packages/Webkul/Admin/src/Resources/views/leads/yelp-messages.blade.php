@@ -9,8 +9,9 @@
 
     @pushOnce('styles')
         <style>
-            .tc .yc-inbox { display: grid; grid-template-columns: minmax(240px, 340px) minmax(0, 1fr); gap: 16px; align-items: start; }
-            @media (max-width: 900px) { .tc .yc-inbox { grid-template-columns: minmax(0, 1fr); } }
+            /* .tc.yc-inbox: both classes sit on the same element (a space would mean "inside" and never match). */
+            .tc.yc-inbox { display: grid; grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); gap: 16px; align-items: start; }
+            @media (max-width: 900px) { .tc.yc-inbox { grid-template-columns: minmax(0, 1fr); } }
             .tc .yc-list { display: flex; flex-direction: column; max-height: 640px; overflow-y: auto; }
             .tc .yc-item { display: flex; gap: 10px; align-items: flex-start; padding: 11px 14px; border-bottom: 1px solid var(--tc-line); color: inherit; text-decoration: none; }
             .tc .yc-item:hover { background: var(--tc-band); }
