@@ -149,6 +149,8 @@ try {
     $triage->check($lead2, true);
     $check('New ready lead -> link created for that lead', $links($lead2) === 1, (string) $links($lead2));
     $check('... emailed to the test address only', $mails()->contains($test) && $mails()->every(fn ($to) => $to === $test), $mails()->implode(' | '));
+    $sentCopy = DB::table('emails')->where('lead_id', $lead2->id)->where('folders', 'like', '%"sent"%')->first();
+    $check('... and a copy is in Krayin Mail > Sent, on the contact and the lead', $sentCopy && (int) $sentCopy->person_id === (int) $person->id && str_contains((string) $sentCopy->reply_to, $test) && $sentCopy->subject !== '' && ! str_contains((string) $sentCopy->reply, '<html'), json_encode($sentCopy));
     $check('... lead moved to Contacted', $stageCode($lead2) === 'contacted', (string) $stageCode($lead2));
     $check('... follow-ups started', DB::table('txn_follow_ups')->where('lead_id', $lead2->id)->exists());
     $check('... no text (SMS engine off)', $twilioCalls() === 0);
@@ -222,6 +224,7 @@ try {
     $odd2 = $makeLead('Pool cleaning', $person);
     $triage->check($odd2, true);
     $check('Staff notifications off -> nothing', $events('staff_notified', $odd2)->isEmpty());
+    $check('Staff notifications are not copied to Mail > Sent (customer emails only)', DB::table('emails')->whereIn('lead_id', [$odd->id, $odd2->id])->doesntExist());
 
     // =====================================================================
     $section = 'Follow-up schedule (exact times)';

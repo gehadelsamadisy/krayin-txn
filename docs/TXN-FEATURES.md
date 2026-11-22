@@ -208,6 +208,21 @@ attachment_text`.
 
 Check: `tests/yelp-message-check.php` (run by `scripts/test-on-copy.sh`).
 
+## Customer emails in Mail > Sent
+
+Every customer email Krayin sends is copied into Krayin's own `emails`
+table: the booking link, the reminder, the final email and the cancellation
+email (`BookingEmail::send`).
+
+- **Where they show:** in folder "sent", so in **Mail > Sent** and on the lead.
+- **What's kept:** subject, body, recipient, contact and lead.
+- **Only emails that actually left.** One stopped by the email guard is not copied.
+- **Staff notifications are not copied.**
+- **No workflows:** the copy is written with the Email model directly, without
+  Krayin's `email.create` events, so no workflow or participant email reacts to it.
+
+Check: `tests/automation-check.php`.
+
 ## Email while testing: one allowed recipient
 
 `app/Providers/AppServiceProvider.php` stops every email whose recipients

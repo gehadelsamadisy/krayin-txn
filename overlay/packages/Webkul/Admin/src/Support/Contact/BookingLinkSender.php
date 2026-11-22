@@ -70,7 +70,7 @@ final class BookingLinkSender
             $result['email_error'] = 'the email guard is on and this address is not an allowed test address';
         } else {
             try {
-                $this->email->send('link', $to, $emailData);
+                $this->email->send('link', $to, $emailData, $person, $lead);
             } catch (Throwable $exception) {
                 Log::error('Krayin could not deliver a Cal.com booking link.', ['person_id' => $person->id, 'exception_class' => get_class($exception)]);
                 $result['email'] = 'failed';

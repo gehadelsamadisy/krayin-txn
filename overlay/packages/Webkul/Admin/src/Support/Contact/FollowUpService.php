@@ -241,7 +241,7 @@ final class FollowUpService
         }
 
         $lead = $leads->first();
-        $this->email->send('reminder', $row->email, $this->email->data($person, $lead, $timezone, $slots, $slots ? $url : null, 'reminder'));
+        $this->email->send('reminder', $row->email, $this->email->data($person, $lead, $timezone, $slots, $slots ? $url : null, 'reminder'), $person, $lead);
         DB::table('txn_follow_ups')->where('id', $row->id)->update(['reminder_sent_at' => now(), 'updated_at' => now()]);
         $this->note($person, $leads, 'Follow-up 1 (24h) emailed', "Sent to {$row->email}: {$how}.".($slots ? "\n{$url}" : ''));
 
@@ -306,7 +306,7 @@ final class FollowUpService
             return $this->line($row, $person, $leads, 'final', "would email {$row->email}");
         }
 
-        $this->email->send('final', $row->email, $this->email->data($person, $leads->first(), config('slot_finder.timezone'), [], null, 'final'));
+        $this->email->send('final', $row->email, $this->email->data($person, $leads->first(), config('slot_finder.timezone'), [], null, 'final'), $person, $leads->first());
         DB::table('txn_follow_ups')->where('id', $row->id)->update(['final_sent_at' => now(), 'updated_at' => now()]);
         $this->note($person, $leads, 'Final follow-up (72h) emailed', "Sent to {$row->email}.");
 

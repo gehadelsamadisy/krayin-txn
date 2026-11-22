@@ -29,17 +29,24 @@ final class BookingEmail
     /** Parts shared by all three emails (config lead_messages.templates.shared). */
     public const SHARED_PARTS = ['header', 'greeting', 'times_heading', 'button', 'fallback', 'signature'];
 
-    /** Sends one of the emails with $data from data() (subject/intro/closing may have been edited). */
-    public function send(string $kind, string $to, array $data): void
+    /**
+     * Sends one of the emails with $data from data() (subject/intro/closing may
+     * have been edited). When it actually left (not stopped by the email
+     * guard), a copy is kept in Krayin's Mail > Sent, on $person and $lead.
+     */
+    public function send(string $kind, string $to, array $data, $person = null, $lead = null): void
     {
         if (! ServiceHealth::hasKey('mail')) {
             throw new MailKeyMissingException(ServiceHealth::noKey('mail'));
         }
 
+        $view = ['kind' => $kind] + $data;
+
         try {
-            Mail::send(
+            // Null when a MessageSending listener stopped it (the email guard).
+            $sent = Mail::send(
                 ['html' => 'admin::emails.booking-link', 'text' => 'admin::emails.booking-link-text'],
-                ['kind' => $kind] + $data,
+                $view,
                 fn ($message) => $message->to($to)->subject(self::plain($data['subject']))
             );
         } catch (\Symfony\Component\Mailer\Exception\TransportExceptionInterface $exception) {
@@ -47,6 +54,46 @@ final class BookingEmail
             ServiceHealth::failed('mail', $exception->getMessage());
 
             throw $exception;
+        }
+
+        if ($sent) {
+            $this->keepInSent($to, self::plain($data['subject']), $view, $sent, $person, $lead);
+        }
+    }
+
+    /**
+     * A sent customer email as a row of Krayin's `emails` table, folder
+     * "sent", like an email sent from Krayin's Mail screen: it shows in
+     * Mail > Sent and on the lead. Written with the model directly, without
+     * Krayin's email.create events, so no workflow reacts to it. A failure
+     * here never undoes or repeats the send.
+     */
+    private function keepInSent(string $to, string $subject, array $view, $sent, $person, $lead): void
+    {
+        try {
+            // The email's body only: Mail > Sent shows it inside Krayin's page.
+            $html = view('admin::emails.booking-link', $view)->render();
+            $body = preg_match('~<body[^>]*>(.*)</body>~is', $html, $match) ? $match[1] : $html;
+            $id = trim((string) $sent->getMessageId(), '<>') ?: uniqid('txn-', true).'@'.(parse_url((string) config('app.url'), PHP_URL_HOST) ?: 'krayin');
+
+            \Webkul\Email\Models\Email::query()->create([
+                'subject' => mb_substr($subject, 0, 250),
+                'source' => 'web',
+                'user_type' => 'admin',
+                'name' => (string) config('mail.from.name'),
+                'reply' => $body,
+                'is_read' => 1,
+                'folders' => ['sent'],
+                'from' => config('mail.from.address'),
+                'reply_to' => [$to],
+                'unique_id' => $id,
+                'message_id' => $id,
+                'reference_ids' => [$id],
+                'person_id' => is_object($person) ? $person->id : null,
+                'lead_id' => is_object($lead) ? $lead->id : null,
+            ]);
+        } catch (\Throwable $exception) {
+            \Illuminate\Support\Facades\Log::warning('Customer email sent, but the copy for Mail > Sent could not be saved.', ['to' => $to, 'error' => $exception->getMessage()]);
         }
     }
 

@@ -127,7 +127,7 @@ final class EmailEngine
                     $data = $mail->data($person, $lead, config('slot_finder.timezone'), [], null, 'cancelled');
                     $data['appointment'] = $when;
                     $data = array_merge($data, $mail->texts('cancelled', $data), ['parts' => $mail->sharedParts($data)]);
-                    $mail->send('cancelled', $to, $data);
+                    $mail->send('cancelled', $to, $data, $person, $lead);
                     $channels[] = "by email ({$to})";
                 } catch (\Throwable $exception) {
                     $channels[] = 'email failed: '.$exception->getMessage();
