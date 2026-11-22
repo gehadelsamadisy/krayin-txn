@@ -93,6 +93,15 @@ return [
         'strict' => true,
     ],
 
+    // Yelp messages: table `yelp_message` in the same database as `lead`
+    // (host, port and database name above), written with its own login that
+    // may only SELECT/INSERT/UPDATE that table (docs/sql/yelp_message.sql).
+    // Registered as the "msg_db" connection in AppServiceProvider.
+    'msg_db' => [
+        'username' => env('MSG_DB_USERNAME', ''),
+        'password' => env('MSG_DB_PASSWORD', ''),
+    ],
+
     // Shared secret TXNHome sends in the X-TXN-Token header when a lead
     // arrives (POST /txn/lead-arrived). Empty = the endpoint refuses all.
     'webhook_token' => env('LEAD_WEBHOOK_TOKEN'),

@@ -173,6 +173,41 @@ in an **Events** card on each lead and contact. Kept forever.
 
 Check: `tests/automation-check.php` (run by `scripts/test-on-copy.sh`).
 
+## Yelp messages (receiving only)
+
+A Zap (trigger **Yelp > New Message**, action **Webhooks by Zapier > POST**)
+sends every Yelp chat message, the customer's and ours, to
+`POST /txn/yelp-message` (`YelpMessageController`, header `X-TXN-Token`),
+as JSON: `lead_id, event_id, user_type, user, text, time, attachment_url,
+attachment_text`.
+
+- **Where it's saved:** table `yelp_message` in the lead database, next to
+  `lead` (`docs/sql/yelp_message.sql`). Krayin writes there with its own login
+  `krayin_msg` (SELECT/INSERT/UPDATE on that table only, connection `msg_db`).
+  `krayin_ro` stays read-only on `lead`.
+- **Rules:**
+  - Switch off: 404. Wrong token: 401.
+  - No lead id / event id, or neither text nor attachment: 422.
+  - The same `event_id` again is kept once ("duplicate").
+  - Database unreachable or no login: 503, so the Zap run errors and can be resent.
+- **Matching:** a message belongs to the Krayin lead whose title has
+  `[TXN-YELP-<lead_id>]`. Messages for leads not in Krayin are kept and
+  listed as "No lead in Krayin".
+- **Where it shows:**
+  - **Leads > Yelp messages** (permission `leads.yelp_messages`): conversation list (All / Unread / No lead in Krayin, search) and the chosen chat. Customer on the left, us on the right, photos inline.
+  - A **Yelp messages** card on the lead.
+  - A **Yelp messages** button with an unread badge on the leads list.
+  - Opening a chat marks it read.
+  - **Reply in Yelp** opens the lead's `reply_url` from the lead database.
+- **Read-only:** nothing is sent to customers.
+- **Event log:** "Yelp message received" / "Yelp message sent by us".
+- **Settings:**
+  - Settings > TXN Settings > Automation > **Yelp messages** (switch, ships off; token; the webhook address to copy)
+  - Connections > **Yelp messages database** (login, password, Test)
+  - `.env`: `MSG_DB_USERNAME`, `MSG_DB_PASSWORD`, `YELP_MESSAGES_TOKEN`
+
+Check: `tests/yelp-message-check.php` (run by `scripts/test-on-copy.sh`).
+
 ## Email while testing: one allowed recipient
 
 `app/Providers/AppServiceProvider.php` stops every email whose recipients

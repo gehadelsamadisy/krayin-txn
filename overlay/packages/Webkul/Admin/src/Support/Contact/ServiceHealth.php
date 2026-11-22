@@ -30,6 +30,7 @@ final class ServiceHealth
         'mail' => ['Email sending', 'email'],
         'geocodio' => ['Geocodio', 'geocodio'],
         'lead_db' => ['Lead database', 'lead_db'],
+        'msg_db' => ['Yelp messages database', 'msg_db'],
     ];
 
     private const TABLE = 'txn_service_status';
@@ -63,6 +64,7 @@ final class ServiceHealth
                 default => true, // array/log (tests) or a mailer that needs no key
             },
             'lead_db' => $set('lead_triage.lead_db.host') && $set('lead_triage.lead_db.database') && $set('lead_triage.lead_db.username') && $set('lead_triage.lead_db.password'),
+            'msg_db' => $set('lead_triage.lead_db.host') && $set('lead_triage.lead_db.database') && $set('lead_triage.msg_db.username') && $set('lead_triage.msg_db.password'),
             default => true,
         };
     }
@@ -137,6 +139,7 @@ final class ServiceHealth
             str_starts_with($key, 'mail.'), str_starts_with($key, 'graph_mail.') => 'mail',
             $key === 'slot_finder.geocodio_api_key' => 'geocodio',
             str_starts_with($key, 'lead_triage.lead_db.') => 'lead_db',
+            str_starts_with($key, 'lead_triage.msg_db.') => 'msg_db',
             default => null,
         };
     }
@@ -146,7 +149,7 @@ final class ServiceHealth
     {
         return match ($test) {
             'smtp', 'graph' => 'mail',
-            'calcom', 'twilio', 'geocodio', 'lead_db' => $test,
+            'calcom', 'twilio', 'geocodio', 'lead_db', 'msg_db' => $test,
             default => null,
         };
     }

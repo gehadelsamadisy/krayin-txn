@@ -48,6 +48,8 @@ final class PipelineEvents
         'automation_blocked' => ['Blocked by a guard', 'automation'],
         'automation_failed' => ['Automation failed', 'automation'],
         'engine_switched' => ['Engine switched', 'automation'],
+        'yelp_message_received' => ['Yelp message received', 'messages'],
+        'yelp_message_sent' => ['Yelp message sent by us', 'messages'],
     ];
 
     public const GROUPS = [
@@ -56,6 +58,7 @@ final class PipelineEvents
         'follow_ups' => 'Follow-ups',
         'bookings' => 'Bookings',
         'automation' => 'Automation',
+        'messages' => 'Yelp messages',
     ];
 
     /** Stack of [actor, source] set by as(). */

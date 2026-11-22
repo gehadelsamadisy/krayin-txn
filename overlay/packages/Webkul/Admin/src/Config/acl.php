@@ -55,6 +55,12 @@ return [
         'route' => ['admin.leads.waiting'],
         'sort' => 7,
     ], [
+        // TXN: Leads > Yelp messages and the Yelp messages card on a lead (read-only).
+        'key' => 'leads.yelp_messages',
+        'name' => 'Yelp messages',
+        'route' => ['admin.leads.yelp_messages'],
+        'sort' => 8,
+    ], [
         // TXN: the "Schedules" / "Routes" sidebar items and header buttons.
         // The pages they open still need the Workers permission.
         'key' => 'worker_schedules',

@@ -461,6 +461,8 @@ class TxnSettingsController extends Controller
             'inputNames' => collect($keys)->mapWithKeys(fn ($key) => [$key => $this->inputName($key)])->all(),
             'secretStatus' => TxnSettings::secretStatus('automation.webhook.secret'),
             'webhookUrl' => route('txn.calcom_webhook'),
+            'yelpTokenStatus' => TxnSettings::secretStatus('automation.yelp.token'),
+            'yelpUrl' => route('txn.yelp_message'),
             'engines' => \Webkul\Admin\Support\Automation\Automation::ENGINES,
             'staffEvents' => \Webkul\Admin\Support\Automation\Automation::STAFF_EVENTS,
             'recent' => \Illuminate\Support\Facades\Schema::hasTable('txn_events')

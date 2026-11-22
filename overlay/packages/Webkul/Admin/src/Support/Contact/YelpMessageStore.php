@@ -1,0 +1,209 @@
+<?php
+
+namespace Webkul\Admin\Support\Contact;
+
+use Carbon\CarbonImmutable;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Throwable;
+use Webkul\Lead\Models\Lead;
+
+/**
+ * Yelp chat messages, kept in the lead database next to `lead` (table
+ * integration.yelp_message, docs/sql/yelp_message.sql). Zapier posts each
+ * message to POST /txn/yelp-message (YelpMessageController), which saves it
+ * here; the lead page card and Leads > Yelp messages read it back.
+ *
+ * Connection "msg_db": the lead database's host, port and name with its own
+ * login (lead_triage.msg_db), which may only SELECT/INSERT/UPDATE this table.
+ * A message belongs to a Krayin lead through the "[TXN-YELP-<id>]" title tag
+ * (same Yelp lead id as yelp_message.source_lead_id and lead.source_lead_id).
+ */
+final class YelpMessageStore
+{
+    public const CONNECTION = 'msg_db';
+
+    public const TABLE = 'yelp_message';
+
+    /** The msg_db connection settings: lead database + the message login. */
+    public static function connectionConfig(): array
+    {
+        return array_merge((array) config('lead_triage.lead_db'), [
+            'username' => (string) config('lead_triage.msg_db.username'),
+            'password' => (string) config('lead_triage.msg_db.password'),
+            // Pages that show messages (and the unread badge) must not hang when it is down.
+            'options' => [\PDO::ATTR_TIMEOUT => 3],
+        ]);
+    }
+
+    private function table()
+    {
+        return DB::connection(self::CONNECTION)->table(self::TABLE);
+    }
+
+    /**
+     * Saves one message from Zapier. Returns "stored" or "duplicate" (same
+     * event_id already saved: Zapier retries and test steps are kept once).
+     * Throws when the database can't be reached (the caller answers 503).
+     *
+     * @param  array{source_lead_id: string, event_id: string, user_type: ?string, user_name: ?string, text: ?string, attachment_url: ?string, attachment_text: ?string, time: ?string}  $message
+     */
+    public function store(array $message, array $raw): string
+    {
+        if ($this->table()->where('event_id', $message['event_id'])->exists()) {
+            return 'duplicate';
+        }
+
+        try {
+            $this->table()->insert([
+                'source_lead_id' => mb_substr($message['source_lead_id'], 0, 255),
+                'event_id' => mb_substr($message['event_id'], 0, 255),
+                'user_type' => self::cut($message['user_type'] ?? null, 32),
+                'user_name' => self::cut($message['user_name'] ?? null, 255),
+                'text' => self::cut($message['text'] ?? null, 65000),
+                'attachment_url' => self::cut($message['attachment_url'] ?? null, 1024),
+                'attachment_text' => self::cut($message['attachment_text'] ?? null, 65000),
+                'sent_at' => self::utc($message['time'] ?? null),
+                'raw_payload' => json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                // Set here (UTC), not left to the column default, whose time zone is the server's.
+                'received_at' => now('UTC')->format('Y-m-d H:i:s'),
+            ]);
+        } catch (QueryException $exception) {
+            // Two deliveries of the same message at the same moment.
+            if (($exception->errorInfo[1] ?? null) === 1062) {
+                return 'duplicate';
+            }
+
+            throw $exception;
+        }
+
+        return 'stored';
+    }
+
+    /** True when the message was written by the business (not the customer). */
+    public static function fromBusiness(?string $userType): bool
+    {
+        return (bool) preg_match('/biz|business|owner|merchant/i', (string) $userType);
+    }
+
+    /** Messages of one Yelp lead, oldest first. */
+    public function thread(string $sourceLeadId, int $limit = 300): Collection
+    {
+        return $this->table()
+            ->where('source_lead_id', $sourceLeadId)
+            ->orderByRaw('COALESCE(sent_at, received_at)')
+            ->orderBy('id')
+            ->limit($limit)
+            ->get();
+    }
+
+    /** Marks the customer's messages of one Yelp lead as read. */
+    public function markRead(string $sourceLeadId): void
+    {
+        $this->table()->where('source_lead_id', $sourceLeadId)->whereNull('read_at')->update(['read_at' => now('UTC')]);
+    }
+
+    /**
+     * One row per Yelp conversation, newest first: source_lead_id, last
+     * message (text, sender, time), message count, unread customer messages.
+     */
+    public function conversations(int $limit = 200): Collection
+    {
+        $latest = $this->table()
+            ->selectRaw('source_lead_id, MAX(id) AS last_id, COUNT(*) AS messages')
+            ->groupBy('source_lead_id');
+
+        $rows = DB::connection(self::CONNECTION)->table(self::TABLE.' as m')
+            ->joinSub($latest, 'c', 'c.last_id', '=', 'm.id')
+            ->select('m.source_lead_id', 'm.text', 'm.attachment_url', 'm.user_type', 'm.user_name', 'm.sent_at', 'm.received_at', 'c.messages')
+            ->orderByDesc('m.id')
+            ->limit($limit)
+            ->get();
+
+        $unread = $this->table()
+            ->whereIn('source_lead_id', $rows->pluck('source_lead_id'))
+            ->whereNull('read_at')
+            ->get(['source_lead_id', 'user_type'])
+            ->reject(fn ($m) => self::fromBusiness($m->user_type))
+            ->countBy('source_lead_id');
+
+        return $rows->map(function ($row) use ($unread) {
+            $row->unread = (int) ($unread[$row->source_lead_id] ?? 0);
+
+            return $row;
+        });
+    }
+
+    /** Unread customer messages in all conversations (for the button badge); 0 when unreachable. */
+    public function unreadCount(): int
+    {
+        try {
+            return $this->table()->whereNull('read_at')->get(['user_type'])
+                ->reject(fn ($m) => self::fromBusiness($m->user_type))->count();
+        } catch (Throwable) {
+            return 0;
+        }
+    }
+
+    /** Krayin leads for Yelp lead ids: source_lead_id => Lead (with person). */
+    public static function leadsFor(iterable $sourceLeadIds): Collection
+    {
+        $ids = collect($sourceLeadIds)->map(fn ($id) => (string) $id)->filter()->unique()->values();
+
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        $leads = Lead::query()->with('person')
+            ->where(function ($query) use ($ids) {
+                foreach ($ids as $id) {
+                    $query->orWhere('title', 'like', '%[TXN-YELP-'.addcslashes($id, '%_\\').']%');
+                }
+            })
+            ->get();
+
+        return $ids->mapWithKeys(function ($id) use ($leads) {
+            $lead = $leads->first(fn ($lead) => str_contains((string) $lead->title, '[TXN-YELP-'.$id.']'));
+
+            return $lead ? [$id => $lead] : [];
+        });
+    }
+
+    /** The Yelp lead id in a Krayin lead's title ("[TXN-YELP-abc]" -> "abc"), or null. */
+    public static function sourceLeadId(mixed $lead): ?string
+    {
+        return preg_match('/\[TXN-YELP-([^\]\s]+)\]/', (string) ($lead->title ?? ''), $match) ? $match[1] : null;
+    }
+
+    /** A stored UTC time (sent_at / received_at) in the company time zone. */
+    public static function localTime(?string $utc): ?CarbonImmutable
+    {
+        return $utc ? CarbonImmutable::parse($utc, 'UTC')->setTimezone(config('slot_finder.timezone')) : null;
+    }
+
+    private static function cut(?string $value, int $max): ?string
+    {
+        $value = trim((string) $value);
+
+        return $value === '' ? null : mb_substr($value, 0, $max);
+    }
+
+    /** Zapier's time ("2026-11-22T10:04:37+00:00", unix seconds, ...) as UTC, or null. */
+    private static function utc(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        try {
+            $time = ctype_digit($value) ? CarbonImmutable::createFromTimestamp((int) (strlen($value) > 11 ? intdiv((int) $value, 1000) : $value)) : CarbonImmutable::parse($value);
+
+            return $time->setTimezone('UTC')->format('Y-m-d H:i:s');
+        } catch (Throwable) {
+            return null;
+        }
+    }
+}

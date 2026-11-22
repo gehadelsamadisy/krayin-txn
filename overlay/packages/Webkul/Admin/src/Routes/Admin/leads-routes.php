@@ -47,6 +47,9 @@ Route::controller(\Webkul\Admin\Http\Controllers\Lead\WaitingController::class)-
     Route::post('{followUpId}/stop', 'stop')->name('admin.leads.waiting.stop');
 });
 
+// Leads > Yelp messages: Yelp chats saved from Zapier (lead database, yelp_message).
+Route::get('leads/yelp-messages', [\Webkul\Admin\Http\Controllers\Lead\YelpMessagesController::class, 'index'])->name('admin.leads.yelp_messages');
+
 // Settings > TXN Settings > Stage rules: which stage each automatic move uses.
 Route::controller(TxnStageRulesController::class)->prefix('settings/txn/stage-rules')->group(function () {
     Route::get('', 'index')->name('admin.settings.txn.stage_rules');

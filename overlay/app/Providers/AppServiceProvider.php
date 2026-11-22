@@ -27,6 +27,9 @@ class AppServiceProvider extends ServiceProvider
         // Lead database (config/lead_triage.php lead_db), added here so the
         // stock config/database.php stays unchanged. Connects only when used.
         config(['database.connections.lead_db' => config('lead_triage.lead_db')]);
+
+        // Yelp messages (Support\Contact\YelpMessageStore): same database, own login.
+        config(['database.connections.msg_db' => \Webkul\Admin\Support\Contact\YelpMessageStore::connectionConfig()]);
     }
 
     /**
@@ -132,12 +135,19 @@ class AppServiceProvider extends ServiceProvider
             }
         });
 
+        // Yelp chat messages from Zapier (own switch, X-TXN-Token), saved in
+        // the lead database's yelp_message table (YelpMessageController).
+        Route::post('txn/yelp-message', \Webkul\Admin\Http\Controllers\Contact\YelpMessageController::class)
+            ->middleware('api')
+            ->name('txn.yelp_message');
+
         // Cal.com tells Krayin about bookings at once (own switch, signed with a secret).
         Route::post('txn/calcom-webhook', \Webkul\Admin\Http\Controllers\Contact\CalcomWebhookController::class)
             ->middleware('api')
             ->name('txn.calcom_webhook');
 
         // Pipeline events of this lead / contact (PipelineEvents, Leads > Event log).
+        Event::listen('admin.leads.view.activities.after', fn ($view) => $view->addTemplate('admin::leads.yelp-chat-card'));
         Event::listen('admin.leads.view.activities.after', fn ($view) => $view->addTemplate('admin::leads.scheduled-card'));
         Event::listen('admin.leads.view.activities.after', fn ($view) => $view->addTemplate('admin::leads.events-card'));
         Event::listen('admin.contact.persons.view.right.after', fn ($view) => $view->addTemplate('admin::leads.events-card'));

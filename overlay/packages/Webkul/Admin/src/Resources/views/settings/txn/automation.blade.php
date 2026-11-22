@@ -170,6 +170,41 @@
                 </div>
             </section>
 
+            {{-- Yelp messages (YelpMessageController) --}}
+            @php $yelpOn = ! empty($values['automation.yelp.enabled']); @endphp
+            <section class="tc-card {{ $yelpOn ? 'tc-state-ready' : 'is-plain' }}">
+                @include('admin::settings.txn.partials.card-head', [
+                    'icon' => 'message',
+                    'title' => 'Yelp messages',
+                    'text' => 'Zapier sends every Yelp chat message (the customer\'s and ours); Krayin saves it in the lead database (yelp_message) and shows it on the lead and on Leads > Yelp messages. Receiving only: nothing is sent to customers. Own switch: not affected by the master switch.',
+                    'aside' => '<span class="tc-status '.($yelpOn ? 'is-on">Listening' : 'is-off">Off').'</span>',
+                ])
+                <div class="tc-body">
+                    @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.yelp.enabled', 'switchLabel' => 'Accept Yelp messages from Zapier'])
+
+                    <div class="tc-grid">
+                        <div class="tc-field tc-wide">
+                            <span class="tc-label">Webhook address (URL in the Zap's Webhooks POST step)</span>
+                            <div class="tc-linkbox">
+                                <input id="yelp-url" type="text" readonly value="{{ $yelpUrl }}" class="tc-input">
+                                <button type="button" class="tc-btn" onclick="navigator.clipboard.writeText(document.getElementById('yelp-url').value); this.textContent = 'Copied';">Copy</button>
+                            </div>
+                            <p class="tc-help">Use the public https address (e.g. https://txnhome.epro.co/txn/yelp-message) so Zapier can reach it.</p>
+                        </div>
+                        <div class="tc-field tc-wide">
+                            <label for="f-yelp-token" class="tc-label">{{ $fields['automation.yelp.token'][2] }}</label>
+                            <input id="f-yelp-token" type="password" name="{{ $inputNames['automation.yelp.token'] }}" class="tc-input" autocomplete="new-password"
+                                placeholder="{{ $yelpTokenStatus['source'] === 'none' ? 'Not set: type at least 16 characters' : 'Set ('.$yelpTokenStatus['ends'].'): leave empty to keep it' }}" @disabled(! $canEdit)>
+                            <p class="tc-help">Any long random text. In the Zap's Webhooks step, add the header <strong>X-TXN-Token</strong> with the same text. Requests without it are refused.</p>
+                        </div>
+                    </div>
+
+                    <p class="tc-note">@include('admin::settings.txn.partials.icon', ['name' => 'info', 'size' => 15])
+                        <span>The Zap: trigger <strong>Yelp &gt; New Message</strong>, action <strong>Webhooks by Zapier &gt; POST</strong>, payload JSON with <strong>lead_id, event_id, user_type, user, text, time, attachment_url, attachment_text</strong>. The messages database login is on <strong>Connections &gt; Yelp messages database</strong>.</span>
+                    </p>
+                </div>
+            </section>
+
             {{-- Schedule --}}
             <section class="tc-card is-plain">
                 @include('admin::settings.txn.partials.card-head', [

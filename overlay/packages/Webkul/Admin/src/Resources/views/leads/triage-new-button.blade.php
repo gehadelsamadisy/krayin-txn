@@ -7,6 +7,16 @@
             <a href="{{ route('admin.leads.waiting') }}" class="secondary-button" title="Customers sent a booking link who haven't booked yet: link, times, follow-ups, next step">Waiting</a>
         @endif
 
+        @if (bouncer()->hasPermission('leads.yelp_messages'))
+            @php
+                $yelpUnread = \Webkul\Admin\Support\Contact\ServiceHealth::hasKey('msg_db')
+                    ? app(\Webkul\Admin\Support\Contact\YelpMessageStore::class)->unreadCount() : 0;
+            @endphp
+            <a href="{{ route('admin.leads.yelp_messages', $yelpUnread ? ['show' => 'unread'] : []) }}" class="secondary-button" title="Yelp chats saved from Zapier: the customer's messages and ours">
+                Yelp messages @if ($yelpUnread)<span style="margin-left: 6px; padding: 0 7px; border-radius: 999px; background: #0e90d9; color: #fff; font-size: 12px; font-weight: 700;">{{ $yelpUnread }}</span>@endif
+            </a>
+        @endif
+
         @if (bouncer()->hasPermission('leads.scheduled'))
             <a href="{{ route('admin.leads.scheduled') }}" class="secondary-button" title="Follow-ups planned with their exact times: cancel, send now or move">Scheduled</a>
         @endif

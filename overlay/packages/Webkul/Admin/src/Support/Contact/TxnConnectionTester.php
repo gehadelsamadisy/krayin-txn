@@ -15,7 +15,7 @@ use Throwable;
  */
 final class TxnConnectionTester
 {
-    public const TESTS = ['calcom', 'twilio', 'smtp', 'graph', 'geocodio', 'lead_db'];
+    public const TESTS = ['calcom', 'twilio', 'smtp', 'graph', 'geocodio', 'lead_db', 'msg_db'];
 
     /** @var array<string, mixed> config path => value to test with */
     private array $values;
@@ -36,6 +36,7 @@ final class TxnConnectionTester
                 'graph' => $this->graph(),
                 'geocodio' => $this->geocodio(),
                 'lead_db' => $this->leadDb(),
+                'msg_db' => $this->msgDb(),
             };
         } catch (Throwable $exception) {
             [$ok, $message] = [false, 'Could not connect ('.class_basename($exception).'). Check the host, network and values.'];
@@ -211,5 +212,32 @@ final class TxnConnectionTester
         }
 
         return [true, "Connected to the lead database: {$count} leads in the lead table."];
+    }
+
+    /** Yelp messages: the lead database's host and name with the message login; reads yelp_message only. */
+    private function msgDb(): array
+    {
+        if ($missing = $this->missing(['lead_triage.lead_db.host', 'lead_triage.lead_db.port', 'lead_triage.lead_db.database', 'lead_triage.msg_db.username'])) {
+            return $missing;
+        }
+
+        config(['database.connections.msg_db_test' => array_merge((array) config('lead_triage.lead_db'), [
+            'host' => $this->value('lead_triage.lead_db.host'),
+            'port' => $this->value('lead_triage.lead_db.port'),
+            'database' => $this->value('lead_triage.lead_db.database'),
+            'username' => $this->value('lead_triage.msg_db.username'),
+            'password' => $this->value('lead_triage.msg_db.password'),
+            'options' => [\PDO::ATTR_TIMEOUT => 5],
+        ])]);
+
+        try {
+            $count = DB::connection('msg_db_test')->table(YelpMessageStore::TABLE)->count();
+        } catch (Throwable $exception) {
+            return [false, 'Yelp messages database: '.$exception->getMessage()];
+        } finally {
+            DB::purge('msg_db_test');
+        }
+
+        return [true, "Connected: {$count} Yelp messages in the yelp_message table."];
     }
 }

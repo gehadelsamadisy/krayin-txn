@@ -100,6 +100,14 @@ final class TxnSettings
             'test' => 'lead_db',
             'keys' => ['lead_triage.lead_db.host', 'lead_triage.lead_db.port', 'lead_triage.lead_db.database', 'lead_triage.lead_db.username', 'lead_triage.lead_db.password', 'lead_triage.webhook_token'],
         ],
+        'msg_db' => [
+            'title' => 'Yelp messages database',
+            'mark' => 'Ye',
+            'purpose' => 'Where Krayin saves the Yelp chat messages Zapier sends: table yelp_message in the lead database above (same host and name).',
+            'note' => 'Its own login, allowed only to read, add and update yelp_message (docs/sql/yelp_message.sql). The switch and the Zap token are on Automation.',
+            'test' => 'msg_db',
+            'keys' => ['lead_triage.msg_db.username', 'lead_triage.msg_db.password'],
+        ],
     ];
 
     public const MAILERS = ['smtp' => 'Brevo SMTP', 'graph' => 'Microsoft 365'];
@@ -281,6 +289,8 @@ final class TxnSettings
             'lead_triage.lead_db.username' => ['connections', 'text', 'Lead database login', ['max' => 64]],
             'lead_triage.lead_db.password' => ['connections', 'secret', 'Lead database password', []],
             'lead_triage.webhook_token' => ['connections', 'secret', 'Webhook token (shared with TXNHome)', ['min' => 16]],
+            'lead_triage.msg_db.username' => ['connections', 'text', 'Messages database login', ['max' => 64]],
+            'lead_triage.msg_db.password' => ['connections', 'secret', 'Messages database password', []],
 
             'txn.guard_email' => ['safety', 'guard', 'Email guard', []],
             'mail_guard.allowed_recipients' => ['safety', 'emails', 'Allowed test emails', ['max_items' => 50]],
@@ -313,6 +323,8 @@ final class TxnSettings
             'automation.staff.events' => ['automation', 'multi', 'Notify about', ['choices' => \Webkul\Admin\Support\Automation\Automation::STAFF_EVENTS]],
             'automation.webhook.enabled' => ['automation', 'bool', 'Cal.com webhook', []],
             'automation.webhook.secret' => ['automation', 'secret', 'Cal.com webhook secret', ['min' => 16]],
+            'automation.yelp.enabled' => ['automation', 'bool', 'Yelp messages', []],
+            'automation.yelp.token' => ['automation', 'secret', 'Yelp messages token (X-TXN-Token in the Zap)', ['min' => 16]],
         ];
 
         foreach (self::EMAIL_PARTS as $group => [$title, $parts]) {
@@ -401,7 +413,7 @@ final class TxnSettings
     /** Mail and lead-database config, to see whether apply()/save() changed it. */
     private static function connectionSnapshot(): string
     {
-        return serialize([config('mail.default'), config('mail.from'), config('mail.mailers.smtp'), config('graph_mail'), config('lead_triage.lead_db')]);
+        return serialize([config('mail.default'), config('mail.from'), config('mail.mailers.smtp'), config('graph_mail'), config('lead_triage.lead_db'), config('lead_triage.msg_db')]);
     }
 
     /**
@@ -412,12 +424,14 @@ final class TxnSettings
     private static function refreshConnections(string $before): void
     {
         config(['database.connections.lead_db' => config('lead_triage.lead_db')]);
+        config(['database.connections.msg_db' => YelpMessageStore::connectionConfig()]);
 
         if ($before === self::connectionSnapshot()) {
             return;
         }
 
         DB::purge('lead_db');
+        DB::purge('msg_db');
 
         if (app()->resolved('mail.manager')) {
             app('mail.manager')->forgetMailers();

@@ -47,4 +47,12 @@ return [
         'enabled' => false,
         'secret' => env('CALCOM_WEBHOOK_SECRET'),
     ],
+
+    // Yelp messages (POST /txn/yelp-message, YelpMessageController): Zapier
+    // posts each Yelp chat message; Krayin saves it in the lead database's
+    // yelp_message table (connection msg_db). Own switch, off by default.
+    'yelp' => [
+        'enabled' => false,
+        'token' => env('YELP_MESSAGES_TOKEN'),
+    ],
 ];
