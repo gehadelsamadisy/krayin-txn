@@ -81,6 +81,12 @@ $test = 'auto.check@txn-check.example';
 DB::beginTransaction();
 
 try {
+    // Values saved on TXN Settings (e.g. the live allowed test emails) would
+    // come back over this script's config before every job (TxnSettings::apply
+    // on JobProcessing). Set aside for the run; the rollback restores them.
+    DB::table('txn_settings')->delete();
+    TxnSettings::apply();
+
     config([
         'mail.default' => 'array', 'queue.default' => 'sync', 'cache.default' => 'array',
         'slot_finder.geocodio_api_key' => 'check-key',
