@@ -68,6 +68,12 @@ return [
         'route' => ['admin.leads.yelp_messages.reply'],
         'sort' => 1,
     ], [
+        // TXN: texts with customers (sidebar item, Leads > SMS messages).
+        'key' => 'sms_messages',
+        'name' => 'SMS messages',
+        'route' => ['admin.leads.sms_messages'],
+        'sort' => 2.4,
+    ], [
         // TXN: the "Schedules" / "Routes" sidebar items and header buttons.
         // The pages they open still need the Workers permission.
         'key' => 'worker_schedules',

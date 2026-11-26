@@ -333,6 +333,8 @@ final class TxnSettings
             'automation.email_intake.minutes' => ['automation', 'int', 'Check every (minutes)', ['min' => 1, 'max' => 60]],
             'automation.email_intake.lookback_days' => ['automation', 'int', 'First check looks back (days)', ['min' => 1, 'max' => 30]],
             'automation.email_intake.mark_read' => ['automation', 'bool', 'Mark imported emails as read in the mailbox', []],
+            'automation.sms_intake.enabled' => ['automation', 'bool', 'Incoming texts', []],
+            'automation.sms_intake.public_url' => ['automation', 'url', 'Public address given to Twilio', []],
         ];
 
         foreach (self::EMAIL_PARTS as $group => [$title, $parts]) {

@@ -447,6 +447,8 @@ class TxnSettingsController extends Controller
                 'bool' => $request->has($input) ? $values[$key] = $request->input($input) === '1' : null,
                 'multi' => $request->has("{$input}_sent") ? $values[$key] = array_values((array) $request->input($input, [])) : null,
                 'secret' => trim((string) $request->input($input, '')) !== '' ? $values[$key] = (string) $request->input($input) : null,
+                // An empty address means "the default" (not an invalid value).
+                'url' => $request->has($input) ? $values[$key] = (trim((string) $request->input($input)) === '' ? null : (string) $request->input($input)) : null,
                 default => $request->has($input) ? $values[$key] = (string) $request->input($input, '') : null,
             };
         }
@@ -464,6 +466,8 @@ class TxnSettingsController extends Controller
             'yelpTokenStatus' => TxnSettings::secretStatus('automation.yelp.token'),
             'yelpUrl' => route('txn.yelp_message'),
             'yelpHookStatus' => TxnSettings::secretStatus('automation.yelp.reply_hook'),
+            'smsUrl' => \Webkul\Admin\Http\Controllers\Contact\SmsInboundController::publicUrl(),
+            'smsTokenSet' => trim((string) config('sms.auth_token')) !== '' && config('sms.auth_token') !== 'CHANGE_ME',
             'engines' => \Webkul\Admin\Support\Automation\Automation::ENGINES,
             'staffEvents' => \Webkul\Admin\Support\Automation\Automation::STAFF_EVENTS,
             'recent' => \Illuminate\Support\Facades\Schema::hasTable('txn_events')

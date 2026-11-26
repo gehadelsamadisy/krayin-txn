@@ -76,4 +76,16 @@ return [
         'lookback_days' => 3,    // first check of a mailbox: emails this many days back
         'mark_read' => true,     // mark imported emails as read in the mailbox
     ],
+
+    // Incoming texts (POST /txn/sms-inbound, SmsInboundController): Twilio
+    // posts each text sent to our number, signed with Krayin's Twilio auth
+    // token. Saved in txn_sms_messages, shown on Leads > SMS messages. Never
+    // replies. Own switch, off by default. Connected when the Twilio number's
+    // "A message comes in" webhook points at public_url.
+    'sms_intake' => [
+        'enabled' => false,
+        // The exact https address given to Twilio (the signature covers it).
+        // Empty = the address Krayin sees, which differs behind a proxy.
+        'public_url' => env('SMS_INBOUND_PUBLIC_URL'),
+    ],
 ];

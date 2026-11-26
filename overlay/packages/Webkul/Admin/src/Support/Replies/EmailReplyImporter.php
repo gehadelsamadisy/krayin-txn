@@ -283,8 +283,8 @@ final class EmailReplyImporter
         return $id ? (int) $id : null;
     }
 
-    /** The contact's newest lead that is not won or lost. */
-    private static function openLeadOf(int $personId): ?int
+    /** The contact's newest lead that is not won or lost (also used for texts, SmsInbox). */
+    public static function openLeadOf(int $personId): ?int
     {
         $id = DB::table('leads')
             ->leftJoin('lead_pipeline_stages as s', 's.id', '=', 'leads.lead_pipeline_stage_id')

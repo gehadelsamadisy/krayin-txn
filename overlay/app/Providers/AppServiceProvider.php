@@ -141,6 +141,12 @@ class AppServiceProvider extends ServiceProvider
             ->middleware('api')
             ->name('txn.yelp_message');
 
+        // Incoming customer texts from Twilio (own switch, X-Twilio-Signature),
+        // saved in txn_sms_messages (SmsInboundController, Support\Replies\SmsInbox).
+        Route::post('txn/sms-inbound', \Webkul\Admin\Http\Controllers\Contact\SmsInboundController::class)
+            ->middleware('api')
+            ->name('txn.sms_inbound');
+
         // Cal.com tells Krayin about bookings at once (own switch, signed with a secret).
         Route::post('txn/calcom-webhook', \Webkul\Admin\Http\Controllers\Contact\CalcomWebhookController::class)
             ->middleware('api')

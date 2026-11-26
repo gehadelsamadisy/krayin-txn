@@ -79,6 +79,9 @@ final class SmsSender
         $messageSid = (string) $response->json('sid');
         $this->note($person, $lead, $to, $body, $messageSid);
 
+        // Copy for Leads > SMS messages, so the thread with the customer is complete.
+        \Webkul\Admin\Support\Replies\SmsInbox::recordOutgoing($messageSid, $to, (string) ($response->json('from') ?: $from), $body, (int) $person->id, is_object($lead) ? (int) $lead->id : null, auth()->guard('user')->id());
+
         return ['status' => 'sent', 'to' => $to, 'sid' => $messageSid];
     }
 

@@ -46,6 +46,13 @@ return [
         'route' => 'admin.leads.yelp_messages',
         'sort' => 2.3,
         'icon-class' => 'icon-note',
+    ], [
+        // TXN: texts with customers (SmsMessagesController; permission sms_messages).
+        'key' => 'sms_messages',
+        'name' => 'SMS messages',
+        'route' => 'admin.leads.sms_messages',
+        'sort' => 2.4,
+        'icon-class' => 'icon-note',
     ],
 
     /**

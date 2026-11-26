@@ -253,6 +253,43 @@
                 </div>
             </section>
 
+            {{-- Incoming texts (SmsInboundController, Support\Replies\SmsInbox) --}}
+            @php $smsInOn = ! empty($values['automation.sms_intake.enabled']); @endphp
+            <section class="tc-card {{ $smsInOn ? 'tc-state-ready' : 'is-plain' }}">
+                @include('admin::settings.txn.partials.card-head', [
+                    'icon' => 'message',
+                    'title' => 'Incoming texts',
+                    'text' => 'Twilio sends each text a customer sends to our number to Krayin. Krayin matches the number to the contact and their newest open lead and shows it on Leads > SMS messages. It never replies on its own. Own switch: not affected by the master switch.',
+                    'aside' => (bouncer()->hasPermission('sms_messages') ? '<a href="'.e(route('admin.leads.sms_messages')).'" class="tc-btn">SMS messages</a> ' : '').'<span class="tc-status '.($smsInOn ? 'is-on">Listening' : 'is-off">Off').'</span>',
+                ])
+                <div class="tc-body">
+                    @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.sms_intake.enabled', 'switchLabel' => 'Accept incoming texts from Twilio'])
+
+                    <div class="tc-grid">
+                        <div class="tc-field tc-wide">
+                            <label for="f-{{ $inputNames['automation.sms_intake.public_url'] }}" class="tc-label">{{ $fields['automation.sms_intake.public_url'][2] }}</label>
+                            <div class="tc-linkbox">
+                                <input id="f-{{ $inputNames['automation.sms_intake.public_url'] }}" type="url" name="{{ $inputNames['automation.sms_intake.public_url'] }}" class="tc-input"
+                                    value="{{ old($inputNames['automation.sms_intake.public_url'], $values['automation.sms_intake.public_url']) }}" placeholder="{{ $smsUrl }}" @disabled(! $canEdit)>
+                                <button type="button" class="tc-btn" onclick="const i = document.getElementById('f-{{ $inputNames['automation.sms_intake.public_url'] }}'); navigator.clipboard.writeText(i.value || i.placeholder); this.textContent = 'Copied';">Copy</button>
+                            </div>
+                            <p class="tc-help">Krayin's permanent public https address ending in /txn/sms-inbound (the Cloudflare link). Paste exactly the same address in Twilio: the signature check covers it. Empty = {{ $smsUrl }}.</p>
+                            @include('admin::settings.txn.partials.field-meta', ['key' => 'automation.sms_intake.public_url'])
+                        </div>
+                    </div>
+
+                    @unless ($smsTokenSet)
+                        <p class="tc-note" style="border-color: var(--tc-bad);">@include('admin::settings.txn.partials.icon', ['name' => 'alert', 'size' => 15])
+                            <span>No Twilio auth token on <strong>Connections</strong>: every text would be refused, because Krayin can't check Twilio's signature.</span>
+                        </p>
+                    @endunless
+
+                    <p class="tc-note">@include('admin::settings.txn.partials.icon', ['name' => 'info', 'size' => 15])
+                        <span>To connect: Twilio Console &gt; Phone Numbers &gt; your number (or the Messaging Service) &gt; <strong>A message comes in</strong> &gt; Webhook, <strong>HTTP POST</strong>, the address above. Twilio sends each number's texts to one address only, so TXNHome stops receiving them. Until then nothing reaches Krayin; <strong>php artisan txn:demo-sms</strong> shows demo texts.</span>
+                    </p>
+                </div>
+            </section>
+
             {{-- Schedule --}}
             <section class="tc-card is-plain">
                 @include('admin::settings.txn.partials.card-head', [

@@ -52,6 +52,9 @@ Route::get('leads/yelp-messages', [\Webkul\Admin\Http\Controllers\Lead\YelpMessa
 // A reply typed under a Yelp chat (YelpReplySender -> the reply Zap).
 Route::post('leads/yelp-messages/{chat}/reply', [\Webkul\Admin\Http\Controllers\Lead\YelpMessagesController::class, 'reply'])->name('admin.leads.yelp_messages.reply');
 
+// Leads > SMS messages: texts with customers (txn_sms_messages, Support\Replies\SmsInbox).
+Route::get('leads/sms-messages', [\Webkul\Admin\Http\Controllers\Lead\SmsMessagesController::class, 'index'])->name('admin.leads.sms_messages');
+
 // Settings > TXN Settings > Stage rules: which stage each automatic move uses.
 Route::controller(TxnStageRulesController::class)->prefix('settings/txn/stage-rules')->group(function () {
     Route::get('', 'index')->name('admin.settings.txn.stage_rules');

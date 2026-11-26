@@ -54,6 +54,7 @@ final class PipelineEvents
         'yelp_reply_failed' => ['Yelp reply not sent', 'messages'],
         'yelp_reply_blocked' => ['Yelp reply blocked by the guard', 'messages'],
         'email_reply_received' => ['Email reply received', 'messages'],
+        'sms_received' => ['Text received', 'messages'],
     ];
 
     public const GROUPS = [

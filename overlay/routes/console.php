@@ -255,6 +255,26 @@ Artisan::command('txn:demo-email-replies {--remove : delete the demo contact, le
     return 0;
 })->purpose('Create demo email replies (nothing is sent) to see how replies show in Krayin');
 
+// Demo of incoming texts (Support\Replies\DemoSms): demo contacts and lead, a
+// "sent" booking text and made-up incoming texts run through the real
+// matching. Nothing is sent, Twilio is not contacted. --remove deletes it.
+Artisan::command('txn:demo-sms {--remove : delete the demo contacts, lead, texts and events}', function (Webkul\Admin\Support\Replies\DemoSms $demo) {
+    if ($this->option('remove')) {
+        $this->info('Demo texts removed ('.$demo->remove().' rows).');
+
+        return 0;
+    }
+
+    $result = $demo->create();
+    $labels = ['lead' => 'on the demo lead', 'unknown' => 'unknown number (no contact)', 'needs_staff' => 'needs staff (number on 2 contacts)', 'duplicate' => 'already there', 'invalid' => 'not saved'];
+
+    $this->info("Demo lead #{$result['lead_id']} \"".Webkul\Admin\Support\Replies\DemoSms::LEAD_TITLE."\" and contact #{$result['person_id']} \"Demo SMS Customer\" created.");
+    $this->table(['Demo text', 'Result'], collect($result['results'])->map(fn ($status, $name) => [$name, $labels[$status] ?? $status])->values()->all());
+    $this->line('See Leads > SMS messages and the demo lead. Remove it all with: php artisan txn:demo-sms --remove');
+
+    return 0;
+})->purpose('Create demo incoming texts (nothing is sent) to see how texts show in Krayin');
+
 // Runs only while "Email replies" is on (Automation), at its interval.
 Schedule::command('txn:fetch-replies')
     ->everyMinute()
