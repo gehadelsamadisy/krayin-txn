@@ -219,6 +219,17 @@ try {
     // 8. Switch off = the scheduler does not run it.
     config(['automation.email_intake.enabled' => false]);
     check('switch off: not due', ! EmailReplyImporter::due());
+
+    // 9. Demo (txn:demo-email-replies): creates and removes cleanly, sends nothing.
+    Http::swap(new Factory());
+    Http::fake();
+    $demo = app(Webkul\Admin\Support\Replies\DemoEmailReplies::class);
+    $made = $demo->create();
+    check('demo: reply, known sender, unknown sender, out-of-office', array_values($made['results']) === ['imported', 'imported', 'no_lead', 'skipped'], json_encode($made['results']));
+    check('demo: reply sits in the demo thread', (int) Email::query()->where('message_id', 'txn-demo-reply@demo.invalid')->value('parent_id') === (int) Email::query()->where('message_id', 'txn-demo-booking-link@demo.invalid')->value('id'));
+    check('demo: no call to Microsoft 365', count(Http::recorded()) === 0);
+    $demo->remove();
+    check('demo: removed completely', ! DB::table('leads')->where('id', $made['lead_id'])->exists() && ! DB::table('persons')->where('id', $made['person_id'])->exists() && ! Email::query()->where('message_id', 'like', 'txn-demo-%')->exists());
 } catch (Throwable $exception) {
     check('no unexpected error', false, get_class($exception).': '.$exception->getMessage().' @ '.basename($exception->getFile()).':'.$exception->getLine());
 } finally {

@@ -235,6 +235,26 @@ Artisan::command('txn:fetch-replies {--mailbox= : only this mailbox (address or 
     return collect($results)->every(fn ($result) => $result['ok']) ? 0 : 1;
 })->purpose('Read new customer emails from every mailbox and add them to their leads');
 
+// Demo of email replies (Support\Replies\DemoEmailReplies): demo contact and
+// lead, a "sent" booking email and made-up replies run through the real
+// importer. Nothing is sent, Microsoft 365 is not contacted. --remove deletes it.
+Artisan::command('txn:demo-email-replies {--remove : delete the demo contact, lead, emails and events}', function (Webkul\Admin\Support\Replies\DemoEmailReplies $demo) {
+    if ($this->option('remove')) {
+        $this->info('Demo email replies removed ('.$demo->remove().' rows).');
+
+        return 0;
+    }
+
+    $result = $demo->create();
+    $labels = ['imported' => 'added to the demo lead', 'no_lead' => 'in Mail > Inbox, no lead', 'skipped' => 'skipped (auto-reply)', 'duplicate' => 'already there'];
+
+    $this->info("Demo lead #{$result['lead_id']} \"".Webkul\Admin\Support\Replies\DemoEmailReplies::LEAD_TITLE."\" and contact #{$result['person_id']} \"Demo Reply Customer\" created.");
+    $this->table(['Demo email', 'Result'], collect($result['results'])->map(fn ($status, $name) => [$name, $labels[$status] ?? $status])->values()->all());
+    $this->line('See Mail > Inbox and the demo lead. Remove it all with: php artisan txn:demo-email-replies --remove');
+
+    return 0;
+})->purpose('Create demo email replies (nothing is sent) to see how replies show in Krayin');
+
 // Runs only while "Email replies" is on (Automation), at its interval.
 Schedule::command('txn:fetch-replies')
     ->everyMinute()
