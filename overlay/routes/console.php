@@ -201,7 +201,46 @@ Artisan::command('txn:restore-contacts {--dry-run : show what would change, save
 
 
 // Krayin's own inbound-emails:process schedule was removed: it fails with the
-// SendGrid receiver and nothing here reads incoming email.
+// SendGrid receiver. Customer replies are read by txn:fetch-replies below
+// (Microsoft 365, every mailbox on Settings > TXN Settings > Mailboxes).
+
+// Email replies (Support\Replies\EmailReplyImporter): reads new emails in
+// every mailbox and adds them to their leads and Mail > Inbox. Read-only.
+// Same as "Check now" on the Mailboxes screen.
+Artisan::command('txn:fetch-replies {--mailbox= : only this mailbox (address or ID)}', function (Webkul\Admin\Support\Replies\EmailReplyImporter $importer) {
+    $only = $this->option('mailbox');
+    $id = null;
+
+    if ($only !== null && $only !== '') {
+        $id = (int) (is_numeric($only) ? $only : Illuminate\Support\Facades\DB::table('txn_mailboxes')->where('address', strtolower(trim($only)))->value('id'));
+
+        if (! $id) {
+            $this->error("No mailbox {$only} on Settings > TXN Settings > Mailboxes.");
+
+            return 1;
+        }
+    }
+
+    $results = Webkul\Admin\Support\Contact\PipelineEvents::as('Email check', 'scheduler', fn () => $importer->run($id));
+
+    if (! $results) {
+        $this->warn('No mailbox reads replies (Settings > TXN Settings > Mailboxes).');
+    }
+
+    foreach ($results as $result) {
+        $line = trim(($result['address'] ? "{$result['address']}: " : '').$result['message']);
+        $result['ok'] ? $this->info($line) : $this->error($line);
+    }
+
+    return collect($results)->every(fn ($result) => $result['ok']) ? 0 : 1;
+})->purpose('Read new customer emails from every mailbox and add them to their leads');
+
+// Runs only while "Email replies" is on (Automation), at its interval.
+Schedule::command('txn:fetch-replies')
+    ->everyMinute()
+    ->withoutOverlapping(15)
+    ->runInBackground()
+    ->when(fn () => Webkul\Admin\Support\Replies\EmailReplyImporter::due());
 
 // Follow-up schedule (Support\Automation\MessageScheduler): each follow-up is
 // sent at its exact time by the krayin-queue worker; nothing polls. This puts

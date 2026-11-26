@@ -364,6 +364,13 @@ return [
         'sort' => 7,
         'icon-class' => 'icon-settings-webhooks',
     ], [
+        'key' => 'settings.txn.mailboxes',
+        'name' => 'Mailboxes',
+        'info' => 'Mailboxes Krayin reads customer replies from, each with its own Microsoft 365 login.',
+        'route' => 'admin.settings.txn.mailboxes',
+        'sort' => 7,
+        'icon-class' => 'icon-mail',
+    ], [
         'key' => 'settings.txn.safety',
         'name' => 'Safety',
         'info' => 'Whether emails, texts and booking links can reach customers.',

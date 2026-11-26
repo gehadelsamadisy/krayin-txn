@@ -75,6 +75,22 @@ foreach (['company', 'services', 'area', 'follow-ups', 'emails', 'connections', 
 // settings.txn.connections.edit is checked in the controller.
 Route::post('settings/txn/connections/test', [TxnSettingsController::class, 'testConnection'])->name('admin.settings.txn.connections.test');
 
+// Settings > TXN Settings > Mailboxes: mailboxes Krayin reads customer
+// replies from, each with its own Microsoft 365 login (Support\Replies).
+Route::controller(\Webkul\Admin\Http\Controllers\Settings\TxnMailboxesController::class)->prefix('settings/txn/mailboxes')->group(function () {
+    Route::get('', 'index')->name('admin.settings.txn.mailboxes');
+
+    Route::post('', 'store')->name('admin.settings.txn.mailboxes.store');
+
+    Route::put('{id}', 'update')->whereNumber('id')->name('admin.settings.txn.mailboxes.update');
+
+    Route::delete('{id}', 'destroy')->whereNumber('id')->name('admin.settings.txn.mailboxes.delete');
+
+    Route::post('{id}/test', 'test')->whereNumber('id')->name('admin.settings.txn.mailboxes.test');
+
+    Route::post('{id}/check', 'check')->whereNumber('id')->name('admin.settings.txn.mailboxes.check');
+});
+
 Route::controller(LeadController::class)->prefix('leads')->group(function () {
     Route::get('', 'index')->name('admin.leads.index');
 

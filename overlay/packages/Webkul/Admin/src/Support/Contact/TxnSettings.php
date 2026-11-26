@@ -329,6 +329,10 @@ final class TxnSettings
             'automation.yelp.token' => ['automation', 'secret', 'Yelp messages token (X-TXN-Token in the Zap)', ['min' => 16]],
             'automation.yelp.reply_enabled' => ['automation', 'bool', 'Yelp replies from Krayin', []],
             'automation.yelp.reply_hook' => ['automation', 'secret', 'Reply Zap address (Webhooks by Zapier > Catch Hook URL)', ['min' => 30]],
+            'automation.email_intake.enabled' => ['automation', 'bool', 'Email replies', []],
+            'automation.email_intake.minutes' => ['automation', 'int', 'Check every (minutes)', ['min' => 1, 'max' => 60]],
+            'automation.email_intake.lookback_days' => ['automation', 'int', 'First check looks back (days)', ['min' => 1, 'max' => 30]],
+            'automation.email_intake.mark_read' => ['automation', 'bool', 'Mark imported emails as read in the mailbox', []],
         ];
 
         foreach (self::EMAIL_PARTS as $group => [$title, $parts]) {

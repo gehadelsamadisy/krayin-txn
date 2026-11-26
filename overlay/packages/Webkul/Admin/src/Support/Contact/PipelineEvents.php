@@ -53,6 +53,7 @@ final class PipelineEvents
         'yelp_reply_sent' => ['Yelp reply sent from Krayin', 'messages'],
         'yelp_reply_failed' => ['Yelp reply not sent', 'messages'],
         'yelp_reply_blocked' => ['Yelp reply blocked by the guard', 'messages'],
+        'email_reply_received' => ['Email reply received', 'messages'],
     ];
 
     public const GROUPS = [
@@ -61,7 +62,7 @@ final class PipelineEvents
         'follow_ups' => 'Follow-ups',
         'bookings' => 'Bookings',
         'automation' => 'Automation',
-        'messages' => 'Yelp messages',
+        'messages' => 'Customer messages',
     ];
 
     /** Stack of [actor, source] set by as(). */

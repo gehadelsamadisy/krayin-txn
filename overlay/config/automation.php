@@ -63,4 +63,17 @@ return [
         'reply_hook' => env('YELP_REPLY_HOOK'),
         'test_lead_ids' => array_values(array_filter(array_map('trim', explode(',', (string) env('YELP_TEST_LEAD_IDS', ''))))),
     ],
+
+    // Email replies (Support\Replies\EmailReplyImporter): every few minutes
+    // Krayin reads new emails in each mailbox on Settings > TXN Settings >
+    // Mailboxes (Microsoft 365, Mail.ReadWrite) and adds them to the lead and
+    // Mail > Inbox. Read-only: nothing is sent. Own switch, off by default.
+    // The automatic check needs the scheduler (KRAYIN_SCHEDULER=true);
+    // "Check now" on the Mailboxes screen works without it.
+    'email_intake' => [
+        'enabled' => false,
+        'minutes' => 2,          // how often the mailboxes are checked
+        'lookback_days' => 3,    // first check of a mailbox: emails this many days back
+        'mark_read' => true,     // mark imported emails as read in the mailbox
+    ],
 ];

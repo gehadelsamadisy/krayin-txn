@@ -704,6 +704,16 @@ return [
         'route' => 'admin.settings.txn.connections.update',
         'sort' => 1,
     ], [
+        'key' => 'settings.txn.mailboxes',
+        'name' => 'Mailboxes',
+        'route' => 'admin.settings.txn.mailboxes',
+        'sort' => 7,
+    ], [
+        'key' => 'settings.txn.mailboxes.edit',
+        'name' => 'admin::app.acl.edit',
+        'route' => ['admin.settings.txn.mailboxes.store', 'admin.settings.txn.mailboxes.update', 'admin.settings.txn.mailboxes.delete', 'admin.settings.txn.mailboxes.test', 'admin.settings.txn.mailboxes.check'],
+        'sort' => 1,
+    ], [
         'key' => 'settings.txn.safety',
         'name' => 'Safety',
         'route' => 'admin.settings.txn.safety',

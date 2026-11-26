@@ -106,7 +106,8 @@ services:
         condition: service_healthy
 
   # Off unless KRAYIN_SCHEDULER=true in .env (deploy.sh then starts it).
-  # Krayin's own schedule: inbound-emails:process every 5 min, campaign:process daily.
+  # Runs Laravel's schedule, incl. txn:fetch-replies (routes/console.php:
+  # customer email replies, while "Email replies" is on in Automation).
   krayin-scheduler:
     <<: *krayin
     container_name: krayin-scheduler

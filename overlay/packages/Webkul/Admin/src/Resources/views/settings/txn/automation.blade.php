@@ -222,6 +222,37 @@
                 </div>
             </section>
 
+            {{-- Email replies (Support\Replies\EmailReplyImporter) --}}
+            @php $intakeOn = ! empty($values['automation.email_intake.enabled']); @endphp
+            <section class="tc-card {{ $intakeOn ? 'tc-state-ready' : 'is-plain' }}">
+                @include('admin::settings.txn.partials.card-head', [
+                    'icon' => 'mail',
+                    'title' => 'Email replies',
+                    'text' => 'Krayin reads new emails in every mailbox on Mailboxes and adds each one to its lead (by the email thread, else by the sender\'s address) and to Mail > Inbox. It only reads: nothing is sent. Own switch: not affected by the master switch.',
+                    'aside' => (bouncer()->hasPermission('settings.txn.mailboxes') ? '<a href="'.e(route('admin.settings.txn.mailboxes')).'" class="tc-btn">Mailboxes</a> ' : '').'<span class="tc-status '.($intakeOn ? 'is-on">Reading' : 'is-off">Off').'</span>',
+                ])
+                <div class="tc-body">
+                    @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.email_intake.enabled', 'switchLabel' => 'Read customer email replies'])
+
+                    <div class="tc-grid">
+                        @foreach (['automation.email_intake.minutes', 'automation.email_intake.lookback_days'] as $key)
+                            <div class="tc-field">
+                                <label for="f-{{ $inputNames[$key] }}" class="tc-label">{{ $fields[$key][2] }}</label>
+                                <input id="f-{{ $inputNames[$key] }}" type="number" min="{{ $fields[$key][3]['min'] }}" max="{{ $fields[$key][3]['max'] }}" name="{{ $inputNames[$key] }}"
+                                    value="{{ old($inputNames[$key], $values[$key]) }}" class="tc-input" @disabled(! $canEdit)>
+                                @include('admin::settings.txn.partials.field-meta', ['key' => $key])
+                            </div>
+                        @endforeach
+                    </div>
+
+                    @include('admin::settings.txn.partials.switch', $common + ['key' => 'automation.email_intake.mark_read', 'help' => 'Needs Mail.ReadWrite. Off: the mailbox is left exactly as it is.'])
+
+                    <p class="tc-note">@include('admin::settings.txn.partials.icon', ['name' => 'info', 'size' => 15])
+                        <span>The automatic check runs in Krayin's scheduler (<strong>KRAYIN_SCHEDULER=true</strong> in .env). <strong>Check now</strong> on Mailboxes works without it. Each mailbox's Microsoft 365 app needs the application permission <strong>Mail.ReadWrite</strong> with admin consent.</span>
+                    </p>
+                </div>
+            </section>
+
             {{-- Schedule --}}
             <section class="tc-card is-plain">
                 @include('admin::settings.txn.partials.card-head', [
