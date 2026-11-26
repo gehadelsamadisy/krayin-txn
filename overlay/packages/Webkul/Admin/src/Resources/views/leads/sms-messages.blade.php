@@ -37,7 +37,34 @@
             .tc .yc-attach { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 13px; text-decoration: underline; color: inherit; }
             .tc .yc-when { font-size: 11px; color: var(--tc-muted); margin: 3px 6px 0; }
             .tc .yc-empty { padding: 28px 12px; text-align: center; color: var(--tc-muted); }
+            .tc .yc-reply { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+            .tc .yc-reply textarea { width: 100%; min-height: 70px; resize: vertical; }
+            .tc .yc-reply-bar { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+            .tc .yc-reply-note { font-size: 12px; color: var(--tc-muted); }
+            .tc .yc-reply-note.is-warn { color: var(--tc-warn); }
         </style>
+    @endPushOnce
+
+    @pushOnce('scripts')
+        <script>
+            // Characters and SMS parts (160 per part, 153 when split; 70 / 67 with emoji or other special characters).
+            (function () {
+                const box = document.getElementById('sms-reply');
+                const out = document.querySelector('[data-sms-count]');
+                if (! box || ! out) {
+                    return;
+                }
+                const update = () => {
+                    const text = box.value;
+                    const plain = /^[\x20-\x7E\n\r£¥èéùìòÇØøÅåÄÖÑÜ§äöñüà]*$/.test(text);
+                    const one = plain ? 160 : 70, many = plain ? 153 : 67;
+                    const parts = text.length === 0 ? 0 : (text.length <= one ? 1 : Math.ceil(text.length / many));
+                    out.textContent = text.length + ' characters' + (parts > 1 ? ' · ' + parts + ' SMS parts' : '');
+                };
+                box.addEventListener('input', update);
+                update();
+            })();
+        </script>
     @endPushOnce
 
     @php
@@ -54,7 +81,7 @@
             <div class="tc-top-text">
                 <span class="tc-crumb">Leads</span>
                 <h1>SMS messages</h1>
-                <p>Texts with customers: the ones they send to our Twilio number, and the booking-link and follow-up texts Krayin sends. Each number is matched to its contact and newest open lead.</p>
+                <p>Texts with customers: the ones they send to our Twilio number, and the booking-link and follow-up texts Krayin sends. Each number is matched to its contact and newest open lead. Reply under the chat: it is sent from our Twilio number.</p>
             </div>
             <a href="{{ route('admin.leads.index') }}" class="secondary-button">Back to leads</a>
         </div>
@@ -151,6 +178,42 @@
                                     <div class="yc-empty">No texts in this conversation yet.</div>
                                 @endforelse
                             </div>
+
+                            {{-- Reply (SmsMessagesController::reply -> SmsSender; the SMS guard applies) --}}
+                            @if (bouncer()->hasPermission('sms_messages.reply'))
+                                @php
+                                    $keysSet = \Webkul\Admin\Support\Contact\ServiceHealth::hasKey('twilio');
+                                    $guardOn = (bool) config('txn.guard_sms', true);
+                                    $allowed = \Webkul\Admin\Support\Contact\SmsSender::allowedNumber($current->customer_number);
+                                    $canSend = $keysSet && $allowed && $current->person_id && ! $current->needs_staff;
+                                    $settingsLink = fn ($route, $label) => bouncer()->hasPermission('settings.txn') ? '<a href="'.e(route($route)).'" style="text-decoration: underline;">'.e($label).'</a>' : e($label);
+                                @endphp
+                                <form method="POST" action="{{ route('admin.leads.sms_messages.reply') }}" class="yc-reply"
+                                    onsubmit="var b = this.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Sending…';">
+                                    @csrf
+                                    <input type="hidden" name="number" value="{{ $current->customer_number }}">
+                                    <label for="sms-reply" class="tc-label" style="margin: 0;">Reply by text to {{ $current->customer_number }}</label>
+                                    <textarea id="sms-reply" name="text" class="tc-input" maxlength="{{ \Webkul\Admin\Http\Controllers\Lead\SmsMessagesController::MAX_LENGTH }}"
+                                        placeholder="{{ $canSend ? 'Write to the customer. It is sent from our Twilio number.' : 'Replying is not available for this conversation right now (see below).' }}"
+                                        @disabled(! $canSend) required>{{ old('text') }}</textarea>
+                                    <div class="yc-reply-bar">
+                                        <span class="yc-reply-note {{ $canSend ? '' : 'is-warn' }}">
+                                            @if ($current->needs_staff)
+                                                This number is on several contacts: keep it on the right one first.
+                                            @elseif (! $current->person_id)
+                                                Unknown number: add it to the customer's contact first, then reply.
+                                            @elseif (! $keysSet)
+                                                Twilio is not set up: {!! $settingsLink('admin.settings.txn.connections', 'Settings > TXN Settings > Connections > Twilio') !!}.
+                                            @elseif (! $allowed)
+                                                SMS guard is on and this isn't an allowed test number. To test with it, add <strong>{{ $current->customer_number }}</strong> on {!! $settingsLink('admin.settings.txn.safety', 'Settings > TXN Settings > Safety') !!}.
+                                            @else
+                                                <span data-sms-count>0 characters</span>{{ $guardOn ? ' · allowed test number (SMS guard on)' : '' }}
+                                            @endif
+                                        </span>
+                                        <button type="submit" class="primary-button" @disabled(! $canSend)>Send text</button>
+                                    </div>
+                                </form>
+                            @endif
                         </div>
                     @else
                         <div class="tc-body">

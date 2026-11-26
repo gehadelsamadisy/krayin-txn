@@ -54,6 +54,8 @@ Route::post('leads/yelp-messages/{chat}/reply', [\Webkul\Admin\Http\Controllers\
 
 // Leads > SMS messages: texts with customers (txn_sms_messages, Support\Replies\SmsInbox).
 Route::get('leads/sms-messages', [\Webkul\Admin\Http\Controllers\Lead\SmsMessagesController::class, 'index'])->name('admin.leads.sms_messages');
+// A reply typed under a conversation (SmsSender; the SMS guard applies).
+Route::post('leads/sms-messages/reply', [\Webkul\Admin\Http\Controllers\Lead\SmsMessagesController::class, 'reply'])->name('admin.leads.sms_messages.reply');
 
 // Settings > TXN Settings > Stage rules: which stage each automatic move uses.
 Route::controller(TxnStageRulesController::class)->prefix('settings/txn/stage-rules')->group(function () {

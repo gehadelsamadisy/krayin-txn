@@ -74,6 +74,12 @@ return [
         'route' => ['admin.leads.sms_messages'],
         'sort' => 2.4,
     ], [
+        // TXN: replying to a text conversation (SmsSender, SMS guard).
+        'key' => 'sms_messages.reply',
+        'name' => 'Reply',
+        'route' => ['admin.leads.sms_messages.reply'],
+        'sort' => 1,
+    ], [
         // TXN: the "Schedules" / "Routes" sidebar items and header buttons.
         // The pages they open still need the Workers permission.
         'key' => 'worker_schedules',

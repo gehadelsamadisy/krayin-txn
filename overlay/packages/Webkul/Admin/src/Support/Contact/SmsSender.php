@@ -21,17 +21,16 @@ final class SmsSender
      * @return array{status: string, to: ?string, sid?: string, error?: string}
      *               status: sent, blocked (not an allowed test number), skipped (no usable number), failed
      */
-    public function send(Person $person, string $body, $lead = null): array
+    public function send(Person $person, string $body, $lead = null, ?string $number = null): array
     {
-        $to = $this->numberFor($person);
+        // $number: reply to this exact number (Leads > SMS messages); else the contact's first one.
+        $to = $number !== null ? ContactDataNormalizer::phone($number) : $this->numberFor($person);
 
-        if ($to === null) {
+        if ($to === null || ! str_starts_with($to, '+')) {
             return ['status' => 'skipped', 'to' => null, 'error' => 'No phone number in international format (+country code) on this contact.'];
         }
 
-        $allowed = array_filter(array_map([ContactDataNormalizer::class, 'phone'], config('sms.allowed_recipients', [])));
-
-        if (config('txn.guard_sms', true) && ! in_array($to, $allowed, true)) {
+        if (! self::allowedNumber($to)) {
             Log::warning('SMS not sent: the number is not in SMS_ALLOWED_RECIPIENTS.', ['to' => $to, 'person_id' => $person->id]);
 
             return ['status' => 'blocked', 'to' => $to, 'error' => 'Not an allowed test number (SMS_ALLOWED_RECIPIENTS).'];
@@ -83,6 +82,22 @@ final class SmsSender
         \Webkul\Admin\Support\Replies\SmsInbox::recordOutgoing($messageSid, $to, (string) ($response->json('from') ?: $from), $body, (int) $person->id, is_object($lead) ? (int) $lead->id : null, auth()->guard('user')->id());
 
         return ['status' => 'sent', 'to' => $to, 'sid' => $messageSid];
+    }
+
+    /** Whether the SMS guard lets a text go to this number (guard off, or an allowed test number). */
+    public static function allowedNumber(?string $number): bool
+    {
+        $to = ContactDataNormalizer::phone($number);
+
+        if ($to === null) {
+            return false;
+        }
+
+        if (! config('txn.guard_sms', true)) {
+            return true;
+        }
+
+        return in_array($to, array_filter(array_map([ContactDataNormalizer::class, 'phone'], config('sms.allowed_recipients', []))), true);
     }
 
     /** The contact's first number Twilio can dial: US numbers are +1…; others need their + country code. */

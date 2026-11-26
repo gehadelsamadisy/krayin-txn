@@ -10,8 +10,8 @@ use Webkul\Admin\Support\Replies\SmsInbox;
 /**
  * Leads > SMS messages: text conversations with customers (txn_sms_messages),
  * one per customer number, newest first, with the chosen one as a chat.
- * Opening a chat marks its texts read. Read-only: replies are sent as before
- * (booking-link and follow-up texts through SmsSender).
+ * Opening a chat marks its texts read. reply(): a text typed under the chat,
+ * sent through SmsSender (SMS guard and test numbers apply).
  */
 class SmsMessagesController extends Controller
 {
@@ -62,6 +62,47 @@ class SmsMessagesController extends Controller
             'receiving' => (bool) config('automation.sms_intake.enabled'),
             'ready' => $ready,
         ]);
+    }
+
+    /** Longest reply (Twilio allows 1600 characters; 160 per SMS part). */
+    public const MAX_LENGTH = 1600;
+
+    /**
+     * POST leads/sms-messages/reply (permission sms_messages.reply): a text
+     * typed under a conversation, sent to that number through SmsSender (the
+     * SMS guard and test numbers apply). Only for a number that belongs to
+     * exactly one contact. Back to the conversation.
+     */
+    public function reply(Request $request, SmsInbox $inbox, \Webkul\Admin\Support\Contact\SmsSender $sender): \Illuminate\Http\RedirectResponse
+    {
+        $number = (string) $request->input('number', '');
+        $text = trim((string) $request->input('text', ''));
+        $back = redirect()->route('admin.leads.sms_messages', ['chat' => $number]);
+
+        $conversation = SmsInbox::ready() ? $inbox->conversations()->firstWhere('customer_number', $number) : null;
+        $person = $conversation && $conversation->person_id ? \Webkul\Contact\Models\Person::query()->find($conversation->person_id) : null;
+
+        $problem = match (true) {
+            $text === '' => 'Type a message first.',
+            mb_strlen($text) > self::MAX_LENGTH => 'The message is too long (at most '.self::MAX_LENGTH.' characters).',
+            ! $conversation => 'That conversation no longer exists.',
+            $conversation->needs_staff => 'This number is on several contacts: keep it on the right contact first, then reply.',
+            ! $person => 'This number is not on a contact yet: add it to the customer\'s contact first, then reply.',
+            default => null,
+        };
+
+        if ($problem) {
+            return $back->withInput($request->only('text'))->with('warning', $problem);
+        }
+
+        $lead = $conversation->lead ? \Webkul\Lead\Models\Lead::query()->find($conversation->lead->id) : null;
+        $result = $sender->send($person, $text, $lead, $number);
+
+        return match ($result['status']) {
+            'sent' => $back->with('success', "Text sent to {$result['to']}."),
+            'blocked' => $back->withInput($request->only('text'))->with('warning', "Not sent: the SMS guard is on and {$result['to']} is not an allowed test number (Settings > TXN Settings > Safety)."),
+            default => $back->withInput($request->only('text'))->with('error', 'Not sent: '.($result['error'] ?? 'unknown error').'.'),
+        };
     }
 
     /** The contacts sharing a number (for "Needs staff"). */

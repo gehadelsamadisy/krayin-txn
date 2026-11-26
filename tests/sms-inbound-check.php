@@ -152,7 +152,38 @@ try {
     check('opening marks it read', $inbox->conversations()->firstWhere('customer_number', '+12025550142')->unread === 0);
     check('shared-number conversation flagged', (bool) $inbox->conversations()->firstWhere('customer_number', '+12025550177')?->needs_staff);
 
-    // 9. Demo: creates, matches, removes cleanly.
+    // 9. Replying from Leads > SMS messages (SmsMessagesController::reply).
+    $reply = function (string $number, string $text) {
+        $request = Request::create('/admin/leads/sms-messages/reply', 'POST', ['number' => $number, 'text' => $text]);
+        app('session.store')->forget(['success', 'warning', 'error']);
+        $request->setLaravelSession(app('session.store'));
+        app()->instance('request', $request);
+
+        return app(Webkul\Admin\Http\Controllers\Lead\SmsMessagesController::class)->reply($request, app(SmsInbox::class), app(SmsSender::class));
+    };
+    $flash = fn () => app('session.store')->get('success') ?? app('session.store')->get('warning') ?? app('session.store')->get('error');
+
+    Http::swap(new Factory());
+    Http::fake(['api.twilio.com/*' => Http::response(['sid' => 'SMcheck-reply', 'from' => '+12025550100', 'status' => 'queued'], 201)]);
+    $reply('+12025550142', 'Great, see you Tuesday at 11!');
+    $replied = DB::table('txn_sms_messages')->where('message_sid', 'SMcheck-reply')->first();
+    check('reply sent to the thread number', $replied && $replied->direction === 'out' && $replied->customer_number === '+12025550142' && (int) $replied->lead_id === (int) $lead->id, (string) $flash());
+    check('reply went to Twilio with that number', collect(Http::recorded())->contains(fn ($pair) => ($pair[0]->data()['To'] ?? null) === '+12025550142'));
+
+    Http::swap(new Factory());
+    Http::fake();
+    $reply('+12025550199', 'Hello');
+    check('unknown number: not sent, explained', count(Http::recorded()) === 0 && str_contains((string) $flash(), 'not on a contact'), (string) $flash());
+    $reply('+12025550177', 'Hello');
+    check('shared number: not sent, explained', count(Http::recorded()) === 0 && str_contains((string) $flash(), 'several contacts'), (string) $flash());
+    config(['sms.allowed_recipients' => ['+12025550111']]);
+    $reply('+12025550142', 'Hello again');
+    check('SMS guard: not an allowed number, not sent', count(Http::recorded()) === 0 && str_contains((string) $flash(), 'SMS guard'), (string) $flash());
+    config(['sms.allowed_recipients' => ['+12025550142']]);
+    $reply('+12025550142', '');
+    check('empty reply refused', count(Http::recorded()) === 0);
+
+    // 10. Demo: creates, matches, removes cleanly.
     DB::table('txn_sms_messages')->whereIn('customer_number', ['+12025550142', '+12025550177', '+12025550199'])->delete();
     DB::table('persons')->where('name', 'like', 'SMS Check%')->delete();
     $demo = app(DemoSms::class);
